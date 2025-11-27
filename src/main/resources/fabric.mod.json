@@ -22,6 +22,9 @@
 				"adapter": "kotlin"
 			}
 		],
+        "client": [
+          "nux.enchained.client.EnchainedClient"
+        ],
 		"fabric-datagen": [
 			{
 				"value": "nux.enchained.EnchainedDataGenerator",
