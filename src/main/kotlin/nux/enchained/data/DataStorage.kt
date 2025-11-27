@@ -49,20 +49,16 @@ class DataStorage : PersistentState() {
     }
 
     // functions to actually interact with data
-    // TODO: Add additional abstraction layer for data interaction.
+    // do NOT directly interact with these
     fun checkForEntry(query: String): Boolean {
         return storedData.contains(query)
     }
 
     fun createEntry(entryData: String) {
 
-        if (!storedData.contains(entryData)) {
             storedData.add(entryData)
             markDirty()
-            Enchained.LOGGER.info("Entry $entryData created successfully.")
-        } else {
-            Enchained.LOGGER.error("Entry $entryData already exists.")
-        }
+            Enchained.LOGGER.info("Entry '$entryData' created successfully.")
 
     }
 

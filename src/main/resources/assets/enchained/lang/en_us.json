@@ -3,5 +3,11 @@
   "item.enchained.contract": "Contract",
   "item.enchained.signed_contract": "Signed Contract",
   "item.enchained.charter": "Charter",
-  "item.enchained.signed_charter": "Signed Charter"
+  "item.enchained.signed_charter": "Signed Charter",
+
+  "itemTooltip.enchained.contract1": "Use this item to sign this contract.",
+  "itemTooltip.enchained.contract2": "Signing this contract will temporarily bind your soul to it.",
+  "itemTooltip.enchained.contract3": "This allows you to empower yourself, at a cost.",
+
+  "itemTooltip.enchained.primaryUser": "Bound to %s."
 }
