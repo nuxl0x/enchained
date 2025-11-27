@@ -20,7 +20,7 @@ object EnchainedItemGroup {
 
     // Builds Item Group
     val ENCHAINED_ITEM_GROUP: ItemGroup = FabricItemGroup.builder()
-        .icon { ItemStack(BindingItems.CHARTER) }
+        .icon { ItemStack(BindingItems.VOW) }
         .displayName(Text.translatable("itemGroup.enchained"))
         .build()
 
@@ -36,10 +36,17 @@ object EnchainedItemGroup {
 
         ItemGroupEvents.modifyEntriesEvent(ENCHAINED_ITEM_GROUP_KEY).register { itemGroup ->
 
+            itemGroup.add(BindingItems.AGREEMENT)
+            itemGroup.add(BindingItems.SIGNED_AGREEMENT)
+
             itemGroup.add(BindingItems.CONTRACT)
             itemGroup.add(BindingItems.SIGNED_CONTRACT)
+
             itemGroup.add(BindingItems.CHARTER)
-            itemGroup.add(BindingItems.SIGNED_CHARTER)
+            itemGroup.add(BindingItems.BOUND_CHARTER)
+
+            itemGroup.add(BindingItems.VOW)
+            itemGroup.add(BindingItems.BOUND_VOW)
 
         }
 

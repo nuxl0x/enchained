@@ -8,13 +8,13 @@ import net.minecraft.text.Text
 import net.minecraft.util.Formatting
 import net.minecraft.world.World
 
-class SignedContractItem(settings: Settings) : Item(settings) {
+class BoundCharterItem(settings: Settings) : Item(settings) {
 
     override fun appendTooltip(stack: ItemStack, world: World?, tooltip: MutableList<Text>, context: TooltipContext) {
         val nbt: NbtCompound = stack.orCreateNbt
 
-        tooltip.add(Text.translatable("itemTooltip.enchained.sContract1"))
-        tooltip.add(Text.translatable("itemTooltip.enchained.sContract2"))
+        tooltip.add(Text.translatable("itemTooltip.enchained.bCharter1"))
+        tooltip.add(Text.translatable("itemTooltip.enchained.bCharter2"))
 
         // value updates from nbt
         if (nbt.contains("primaryUser") && nbt.contains("secondaryUser")) {

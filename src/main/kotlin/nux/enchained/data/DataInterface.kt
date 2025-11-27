@@ -15,14 +15,14 @@ class DataInterface(
 
     fun create(): Int {
         // Checks if both users are the same person.
-        if (primaryUser == secondaryUser) {
-            Enchained.LOGGER.error("Entry '$dataEntry' cannot have matching fields.")
-            return 1
-        }
+        //if (primaryUser == secondaryUser) {
+        //    Enchained.LOGGER.error("Entry '$dataEntry' cannot have matching fields.")
+        //    return 1
+        //}
 
         // Checks if this entry already exists within the database.
         if (dataStorage.checkForEntry(dataEntry)) {
-            return 1
+            return 0
         }
 
         // Checks if the inverse of this entry already exists within the database.

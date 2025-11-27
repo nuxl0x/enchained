@@ -1,13 +1,33 @@
 {
   "itemGroup.enchained": "Enchained",
+
+  "item.enchained.agreement": "Agreement",
+  "item.enchained.signed_agreement": "Signed Agreement",
   "item.enchained.contract": "Contract",
   "item.enchained.signed_contract": "Signed Contract",
   "item.enchained.charter": "Charter",
-  "item.enchained.signed_charter": "Signed Charter",
+  "item.enchained.bound_charter": "Bound Charter",
+  "item.enchained.vow": "Vow",
+  "item.enchained.bound_vow": "Bound Vow",
+
+  "itemTooltip.enchained.primaryUser": "Bound to %s.",
+  "itemTooltip.enchained.secondaryUser": "Signed to %s.",
+
+
 
   "itemTooltip.enchained.contract1": "Use this item to sign this contract.",
   "itemTooltip.enchained.contract2": "Signing this contract will temporarily bind your soul to it.",
   "itemTooltip.enchained.contract3": "This allows you to empower yourself, at a cost.",
 
-  "itemTooltip.enchained.primaryUser": "Bound to %s."
+  "itemTooltip.enchained.sContract1": "Represents a contract between two people.",
+  "itemTooltip.enchained.sContract2": "You are able to see the signatories below.",
+
+
+
+  "itemTooltip.enchained.charter1": "A irreversible agreement.",
+  "itemTooltip.enchained.charter2": "An everlasting vow.",
+  "itemTooltip.enchained.charter3": "By all means.",
+
+  "itemTooltip.enchained.bCharter1": "An agreement as irreversible as time.",
+  "itemTooltip.enchained.bCharter2": "A vow that will last beyond the end."
 }

@@ -3,15 +3,16 @@
 	"id": "enchained",
 	"version": "${version}",
 	"name": "Enchained",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"description": "Agreements. Shackles. Benefit. Ruin.",
 	"authors": [
-		"Me!"
+		"nuxlox / nuxl0x",
+        "Callumari"
 	],
 	"contact": {
 		"homepage": "https://fabricmc.net/",
 		"sources": "https://github.com/FabricMC/fabric-example-mod"
 	},
-	"license": "CC0-1.0",
+	"license": "MIT",
 	"icon": "assets/enchained/icon.png",
 	"environment": "*",
 	"entrypoints": {
