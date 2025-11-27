@@ -7,6 +7,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import nux.enchained.client.gui.EnchainedTeamsScreen;
+import nux.enchained.network.EnchainedNetworking;
 
 public class EnchainedClient implements ClientModInitializer {
 
@@ -20,6 +21,8 @@ public class EnchainedClient implements ClientModInitializer {
                 pendingScreen = null;
             }
         });
+
+        EnchainedNetworking.registerClientReceivers();
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
             dispatcher.register(
