@@ -7,7 +7,6 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.client.util.DefaultSkinHelper;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import nux.enchained.client.skin.EnchainedPlayerSkins;
@@ -100,6 +99,43 @@ public class EnchainedTeamsScreen extends Screen {
     private int addPlayerScroll = 0;
     private final int addPlayerEntryHeight = 22;
 
+    // ----- Player-side state -----
+
+    private ClientPlayerInfo selfInfo = null;
+
+    private enum PlayerSubView {
+        MAIN,
+        CREATE_TEAM,
+        JOIN_TEAM,
+        LEADER_REQUESTS,
+        TRANSFER_OWNERSHIP
+    }
+
+    private PlayerSubView playerSubView = PlayerSubView.MAIN;
+
+    // which teams this client has requested to join (by lowercase name)
+    private final Set<String> myPendingJoinTeams = new HashSet<>();
+
+    // player view scrolls
+    private int playerMemberListScroll = 0;
+    private final int playerMemberEntryHeight = 24;
+
+    private int joinTeamScroll = 0;
+    private final int joinTeamEntryHeight = 22;
+
+    private int leaderRequestsScroll = 0;
+    private final int leaderRequestsEntryHeight = 22;
+
+    private int transferOwnershipScroll = 0;
+    private final int transferOwnershipEntryHeight = 22;
+
+    // player buttons
+    private ButtonWidget playerCreateTeamButton;
+    private ButtonWidget playerJoinTeamButton;
+    private ButtonWidget playerLeaveTeamButton;
+    private ButtonWidget playerViewRequestsButton;
+    private ButtonWidget playerTransferOwnerButton;
+
     public EnchainedTeamsScreen() {
         super(Text.literal("Enchained Teams"));
     }
@@ -126,6 +162,8 @@ public class EnchainedTeamsScreen extends Screen {
     }
 
     public void applyFullSync(List<TeamSnapshot> teamSnapshots, List<PlayerSnapshot> playerSnapshots) {
+        ClientTeam oldSelfTeam = selfInfo != null ? selfInfo.team : null;
+
         this.teams.clear();
         this.allPlayers.clear();
         this.memberAnimY.clear();
@@ -163,17 +201,40 @@ public class EnchainedTeamsScreen extends Screen {
             playerById.put(ps.uuid, info);
         }
 
+        // Resolve "self" from the snapshot list
+        selfInfo = null;
+        if (mc != null && mc.player != null) {
+            UUID selfId = mc.player.getUuid();
+            selfInfo = playerById.get(selfId);
+        }
+
         // Attach members to teams
         for (TeamSnapshot snap : teamSnapshots) {
             ClientTeam ct = teamsByKey.get(snap.name.toLowerCase(Locale.ROOT));
             if (ct == null) continue;
 
+            // members
             for (UUID memberId : snap.members) {
                 ClientPlayerInfo info = playerById.get(memberId);
                 if (info == null) continue;
                 ClientMember cm = new ClientMember(info.uuid, info.name, info.profile);
                 ct.members.add(cm);
                 info.team = ct;
+            }
+
+            // pending join requests (you need to add this to TeamSnapshot)
+            if (snap.joinRequests != null) { // <-- add joinRequests: List<UUID> to TeamSnapshot
+                for (UUID reqId : snap.joinRequests) {
+                    ClientPlayerInfo info = playerById.get(reqId);
+                    if (info == null) continue;
+                    ClientMember cm = new ClientMember(info.uuid, info.name, info.profile);
+                    ct.joinRequests.add(cm);
+
+                    // if this client has a pending request to this team, remember it
+                    if (selfInfo != null && selfInfo.uuid.equals(reqId)) {
+                        myPendingJoinTeams.add(ct.name.toLowerCase(Locale.ROOT));
+                    }
+                }
             }
         }
 
@@ -190,6 +251,37 @@ public class EnchainedTeamsScreen extends Screen {
         this.memberListScroll = 0;
         this.addPlayerScroll = 0;
         this.draggingMemberIndex = -1;
+
+        if (selfInfo != null && selfInfo.team != null) {
+            myPendingJoinTeams.clear();
+        }
+
+        ClientTeam newSelfTeam = selfInfo != null ? selfInfo.team : null;
+
+        // If team changed, adjust subview a bit
+        if (!Objects.equals(oldSelfTeam, newSelfTeam)) {
+            if (newSelfTeam == null) {
+                // We’re no longer in a team -> go back to main player view
+                playerSubView = PlayerSubView.MAIN;
+            }
+        }
+
+        // If selectedTeam vanished but we were in its manager view, go back
+        if (currentView == ViewMode.ADMIN_TEAM_MANAGER && selectedTeam == null) {
+            currentView = ViewMode.ADMIN_MAIN;
+        }
+
+        // Rebuild all widgets to match the new data
+        rebuildView();
+    }
+
+    public void onJoinRequestResult(String teamName, boolean accepted) {
+        String key = teamName.toLowerCase(Locale.ROOT);
+        myPendingJoinTeams.remove(key);
+        if (accepted && selfInfo != null) {
+            // the server will update selfInfo.team on next FullSync;
+            // nothing else needed here
+        }
     }
 
     // ------------------------
@@ -243,6 +335,12 @@ public class EnchainedTeamsScreen extends Screen {
         // Clear all widgets and re-add everything for this view
         this.clearChildren();
 
+        // Reset any widgets that are lazily created in render()
+        playerLeaveTeamButton = null;
+        playerViewRequestsButton = null;
+        playerTransferOwnerButton = null;
+        tmDisbandButton = null;
+
         // Recreate tabs (if admin)
         setupTabs();
 
@@ -252,6 +350,7 @@ public class EnchainedTeamsScreen extends Screen {
             case ADMIN_CREATE_TEAM -> buildAdminCreateTeamView();
             case ADMIN_TEAM_MANAGER -> buildAdminTeamManagerView();
             case ADMIN_ADD_PLAYER -> buildAdminAddPlayerView();
+            default -> {}
         }
     }
 
@@ -260,7 +359,145 @@ public class EnchainedTeamsScreen extends Screen {
     // ------------------------
 
     private void buildPlayerView() {
-        // No extra widgets yet; just a placeholder text in render().
+        MinecraftClient mc = MinecraftClient.getInstance();
+        ClientPlayerEntity player = mc != null ? mc.player : null;
+
+        // Try to resolve selfInfo lazily if not yet set
+        if (selfInfo == null && player != null) {
+            UUID selfId = player.getUuid();
+            for (ClientPlayerInfo info : allPlayers) {
+                if (info.uuid.equals(selfId)) {
+                    selfInfo = info;
+                    break;
+                }
+            }
+        }
+
+        // Decide what to build based on current sub-view
+        switch (playerSubView) {
+            case MAIN -> buildPlayerMainView();
+            case CREATE_TEAM -> buildPlayerCreateTeamView();
+            case JOIN_TEAM -> buildPlayerJoinTeamView();
+            case LEADER_REQUESTS -> buildPlayerLeaderRequestsView();
+            case TRANSFER_OWNERSHIP -> buildPlayerTransferOwnershipView();
+        }
+    }
+
+    private void buildPlayerMainView() {
+        // No extra widgets if we don't know who we are
+        ClientTeam myTeam = selfInfo != null ? selfInfo.team : null;
+
+        if (myTeam == null) {
+            // Not in a team -> show "Create Team" + "Join Team"
+            int centerX = this.width / 2;
+            int startY = this.height / 2 - 20;
+            int buttonWidth = 120;
+            int buttonHeight = 20;
+            int gap = 6;
+
+            playerCreateTeamButton = ButtonWidget.builder(Text.literal("Create Team"), button -> {
+                // same UI as admin create, but from player subview
+                playerSubView = PlayerSubView.CREATE_TEAM;
+                rebuildView();
+            }).dimensions(centerX - buttonWidth / 2, startY, buttonWidth, buttonHeight).build();
+            this.addDrawableChild(playerCreateTeamButton);
+
+            playerJoinTeamButton = ButtonWidget.builder(Text.literal("Join Team"), button -> {
+                playerSubView = PlayerSubView.JOIN_TEAM;
+                rebuildView();
+            }).dimensions(centerX - buttonWidth / 2, startY + buttonHeight + gap, buttonWidth, buttonHeight).build();
+            this.addDrawableChild(playerJoinTeamButton);
+        } else {
+            // In a team -> show leave / leader controls in other builders
+            // (buttons themselves are added in "team" sub-views during render)
+            // nothing to add here; they are added in the sub-builders
+        }
+    }
+
+    private void buildPlayerCreateTeamView() {
+        int centerX = this.width / 2;
+        int startY = this.height / 2 - 60;
+        int fieldWidth = 180;
+        int fieldHeight = 20;
+        int gap = 6;
+
+        // Team name field (reuse same fields as admin so onCreateTeamDone works)
+        teamNameField = new TextFieldWidget(this.textRenderer, centerX - fieldWidth / 2, startY, fieldWidth, fieldHeight, Text.literal("Team Name"));
+        teamNameField.setPlaceholder(Text.literal("Team name"));
+        this.addDrawableChild(teamNameField);
+
+        // RGB fields
+        int rgbFieldX = centerX - fieldWidth / 2 + 40;
+        int rgbY = startY + fieldHeight + gap;
+
+        redField = new TextFieldWidget(this.textRenderer, rgbFieldX, rgbY, 40, fieldHeight, Text.literal("R"));
+        redField.setText("255");
+        this.addDrawableChild(redField);
+
+        rgbY += fieldHeight + gap;
+        greenField = new TextFieldWidget(this.textRenderer, rgbFieldX, rgbY, 40, fieldHeight, Text.literal("G"));
+        greenField.setText("255");
+        this.addDrawableChild(greenField);
+
+        rgbY += fieldHeight + gap;
+        blueField = new TextFieldWidget(this.textRenderer, rgbFieldX, rgbY, 40, fieldHeight, Text.literal("B"));
+        blueField.setText("255");
+        this.addDrawableChild(blueField);
+
+        // Done + Cancel
+        int buttonY = rgbY + fieldHeight + 12;
+
+        createTeamDoneButton = ButtonWidget.builder(Text.literal("Done"), button -> {
+            onCreateTeamDone(); // this already branches admin/player based on isAdmin + currentView
+        }).dimensions(centerX - 90, buttonY, 80, 20).build();
+        this.addDrawableChild(createTeamDoneButton);
+
+        createTeamCancelButton = ButtonWidget.builder(Text.literal("Cancel"), button -> {
+            // For players, just go back to the player main view
+            playerSubView = PlayerSubView.MAIN;
+            currentView = ViewMode.PLAYER;
+            rebuildView();
+        }).dimensions(centerX + 10, buttonY, 80, 20).build();
+        this.addDrawableChild(createTeamCancelButton);
+    }
+
+    private void buildPlayerJoinTeamView() {
+        int backWidth = 80;
+        int backHeight = 20;
+        int x = this.width - backWidth - 10;
+        int y = 10;
+
+        ButtonWidget back = ButtonWidget.builder(Text.literal("< Back"), button -> {
+            playerSubView = PlayerSubView.MAIN;
+            rebuildView();
+        }).dimensions(x, y, backWidth, backHeight).build();
+        this.addDrawableChild(back);
+    }
+
+    private void buildPlayerLeaderRequestsView() {
+        int backWidth = 80;
+        int backHeight = 20;
+        int x = this.width - backWidth - 10;
+        int y = 10;
+
+        ButtonWidget back = ButtonWidget.builder(Text.literal("< Back"), button -> {
+            playerSubView = PlayerSubView.MAIN;
+            rebuildView();
+        }).dimensions(x, y, backWidth, backHeight).build();
+        this.addDrawableChild(back);
+    }
+
+    private void buildPlayerTransferOwnershipView() {
+        int backWidth = 80;
+        int backHeight = 20;
+        int x = this.width - backWidth - 10;
+        int y = 10;
+
+        ButtonWidget back = ButtonWidget.builder(Text.literal("< Back"), button -> {
+            playerSubView = PlayerSubView.MAIN;
+            rebuildView();
+        }).dimensions(x, y, backWidth, backHeight).build();
+        this.addDrawableChild(back);
     }
 
     // ------------------------
@@ -341,9 +578,23 @@ public class EnchainedTeamsScreen extends Screen {
         int b = parseColorField(blueField);
         int color = (r << 16) | (g << 8) | b;
 
-        EnchainedNetworking.sendCreateTeam(name, color);
+        // Are we currently in the PLAYER tab's "Create Team" screen?
+        boolean fromPlayerPanel =
+                (currentView == ViewMode.PLAYER && playerSubView == PlayerSubView.CREATE_TEAM);
 
-        currentView = ViewMode.ADMIN_MAIN;
+        if (fromPlayerPanel) {
+            // Player (or admin on Player tab) -> create team with self as leader + member
+            EnchainedNetworking.sendCreateTeamSelf(name, color);
+
+            currentView = ViewMode.PLAYER;
+            playerSubView = PlayerSubView.MAIN;
+        } else {
+            // Admin panel -> create an empty team (no leader/members)
+            EnchainedNetworking.sendCreateTeam(name, color);
+
+            currentView = ViewMode.ADMIN_MAIN;
+        }
+
         rebuildView();
     }
 
@@ -488,11 +739,398 @@ public class EnchainedTeamsScreen extends Screen {
     }
 
     private void renderPlayerView(DrawContext ctx) {
+        ClientTeam myTeam = selfInfo != null ? selfInfo.team : null;
+
+        switch (playerSubView) {
+            case MAIN -> renderPlayerMainView(ctx, myTeam);
+            case CREATE_TEAM -> renderAdminCreateTeamView(ctx); // reuse admin preview
+            case JOIN_TEAM -> renderPlayerJoinTeamView(ctx);
+            case LEADER_REQUESTS -> renderPlayerLeaderRequestsView(ctx, myTeam);
+            case TRANSFER_OWNERSHIP -> renderPlayerTransferOwnershipView(ctx, myTeam);
+        }
+    }
+
+    private void renderPlayerMainView(DrawContext ctx, @Nullable ClientTeam myTeam) {
+        if (myTeam == null) {
+            ctx.drawCenteredTextWithShadow(
+                    this.textRenderer,
+                    Text.literal("You are not in a team."),
+                    this.width / 2,
+                    30,
+                    0xFFFFFF
+            );
+            // buttons are handled in buildPlayerMainView()
+            return;
+        }
+
+        // In a team -> show member list + leave button and leader controls
+
+        boolean isLeader = selfInfo != null
+                && !myTeam.members.isEmpty()
+                && myTeam.members.get(0).uuid.equals(selfInfo.uuid);
+
         ctx.drawCenteredTextWithShadow(
                 this.textRenderer,
-                Text.literal("Player team controls will go here."),
+                Text.literal("Your Team: " + myTeam.name),
                 this.width / 2,
-                this.height / 2,
+                30,
+                0xFFFFFF
+        );
+
+        // Left side member list (non-draggable)
+        int listX = 10;
+        int listY = 50;
+        int listWidth = this.width / 2 - 20;
+        int listHeight = this.height - listY - 40;
+
+        ctx.fill(listX, listY, listX + listWidth, listY + listHeight, 0x80000000);
+
+        int y = listY + 4 - playerMemberListScroll;
+        for (int i = 0; i < myTeam.members.size(); i++) {
+            ClientMember m = myTeam.members.get(i);
+
+            int entryTop = y;
+            int entryBottom = y + playerMemberEntryHeight - 2;
+            if (entryBottom < listY || entryTop > listY + listHeight) {
+                y += playerMemberEntryHeight;
+                continue;
+            }
+
+            int entryLeft = listX + 4;
+            int entryRight = listX + listWidth - 4;
+
+            boolean memberIsLeader = (i == 0);
+            int bgColor = memberIsLeader ? 0x60FFD700 : 0x40FFFFFF;
+            ctx.fill(entryLeft, entryTop, entryRight, entryBottom, bgColor);
+
+            int headSize = playerMemberEntryHeight - 6;
+            int headX = entryLeft + 4;
+            int headY = entryTop + 3;
+            drawPlayerHead(ctx, headX, headY, headSize, m.profile);
+
+            int textX = headX + headSize + 6;
+            ctx.drawTextWithShadow(
+                    this.textRenderer,
+                    Text.literal(m.name + (memberIsLeader ? " (Leader)" : "")),
+                    textX,
+                    entryTop + 6,
+                    0xFFFFFF
+            );
+
+            // Leader-only remove button (greyed if locked)
+            if (isLeader && !memberIsLeader) {
+                int removeSize = 14;
+                int removeX = entryRight - removeSize - 4;
+                int removeY = entryTop + (playerMemberEntryHeight - removeSize) / 2;
+                int color = myTeam.locked ? 0xFF555555 : 0xFFAA0000;
+                ctx.fill(removeX, removeY, removeX + removeSize, removeY + removeSize, color);
+                ctx.drawCenteredTextWithShadow(
+                        this.textRenderer,
+                        Text.literal("-"),
+                        removeX + removeSize / 2,
+                        removeY + (removeSize - this.textRenderer.fontHeight) / 2,
+                        0xFFFFFFFF
+                );
+            }
+
+            y += playerMemberEntryHeight;
+        }
+
+        // Right side controls
+
+        int leaveWidth = 80;
+        int leaveHeight = 20;
+        int leaveX = this.width - leaveWidth - 10;
+        int leaveY = 10;
+
+        if (playerLeaveTeamButton == null) {
+            playerLeaveTeamButton = ButtonWidget.builder(Text.literal("Leave"), b -> {
+                if (myTeam.locked) {
+                    sendDebug("This team is locked; you cannot leave.");
+                    return;
+                }
+                EnchainedNetworking.sendLeaveTeam();
+            }).dimensions(leaveX, leaveY, leaveWidth, leaveHeight).build();
+            this.addDrawableChild(playerLeaveTeamButton);
+        }
+        playerLeaveTeamButton.active = !myTeam.locked;
+
+        if (isLeader) {
+            int buttonWidth = 120;
+            int buttonHeight = 20;
+            int baseX = this.width - buttonWidth - 10;
+            int baseY = 50;
+            int gap = 6;
+
+            if (playerViewRequestsButton == null) {
+                playerViewRequestsButton = ButtonWidget.builder(Text.literal("View Join Requests"), b -> {
+                    playerSubView = PlayerSubView.LEADER_REQUESTS;
+                    rebuildView();
+                }).dimensions(baseX, baseY, buttonWidth, buttonHeight).build();
+                this.addDrawableChild(playerViewRequestsButton);
+            }
+
+            if (playerTransferOwnerButton == null) {
+                playerTransferOwnerButton = ButtonWidget.builder(Text.literal("Transfer Ownership"), b -> {
+                    playerSubView = PlayerSubView.TRANSFER_OWNERSHIP;
+                    rebuildView();
+                }).dimensions(baseX, baseY + buttonHeight + gap, buttonWidth, buttonHeight).build();
+                this.addDrawableChild(playerTransferOwnerButton);
+            }
+
+            // Disband button bottom-right
+            if (tmDisbandButton == null || currentView != ViewMode.PLAYER) {
+                tmDisbandButton = ButtonWidget.builder(Text.literal("Disband"), b -> {
+                    if (myTeam.locked) {
+                        sendDebug("This team is locked; you cannot disband it.");
+                        return;
+                    }
+                    EnchainedNetworking.sendDisbandTeam(myTeam.name);
+                }).dimensions(this.width - 90, this.height - 30, 80, 20).build();
+                this.addDrawableChild(tmDisbandButton);
+            }
+            tmDisbandButton.active = !myTeam.locked;
+        }
+    }
+
+    private void renderPlayerJoinTeamView(DrawContext ctx) {
+        ctx.drawCenteredTextWithShadow(
+                this.textRenderer,
+                Text.literal("Join a Team"),
+                this.width / 2,
+                30,
+                0xFFFFFF
+        );
+
+        int boxX = this.width / 2 - 150;
+        int boxY = 50;
+        int boxWidth = 300;
+        int boxHeight = this.height - boxY - 30;
+
+        ctx.fill(boxX, boxY, boxX + boxWidth, boxY + boxHeight, 0x80000000);
+
+        int y = boxY + 4 - joinTeamScroll;
+
+        for (ClientTeam team : teams) {
+            int entryTop = y;
+            int entryBottom = y + joinTeamEntryHeight - 2;
+            if (entryBottom < boxY || entryTop > boxY + boxHeight) {
+                y += joinTeamEntryHeight;
+                continue;
+            }
+
+            int entryLeft = boxX + 4;
+            int entryRight = boxX + boxWidth - 4;
+            ctx.fill(entryLeft, entryTop, entryRight, entryBottom, 0x40FFFFFF);
+
+            int badgeSize = joinTeamEntryHeight - 6;
+            int badgeX = entryLeft + 4;
+            int badgeY = entryTop + 3;
+            int argb = 0xFF000000 | team.color;
+            ctx.fill(badgeX, badgeY, badgeX + badgeSize, badgeY + badgeSize, argb);
+
+            String initial = team.name.isEmpty()
+                    ? "?"
+                    : team.name.substring(0, 1).toUpperCase(Locale.ROOT);
+            ctx.drawCenteredTextWithShadow(
+                    this.textRenderer,
+                    Text.literal(initial),
+                    badgeX + badgeSize / 2,
+                    badgeY + (badgeSize - this.textRenderer.fontHeight) / 2,
+                    0xFFFFFFFF
+            );
+
+            int textX = badgeX + badgeSize + 6;
+            ctx.drawTextWithShadow(
+                    this.textRenderer,
+                    Text.literal(team.name),
+                    textX,
+                    entryTop + 6,
+                    0xFFFFFF
+            );
+
+            // "Request sent" tag if we already requested this team
+            String key = team.name.toLowerCase(Locale.ROOT);
+            if (myPendingJoinTeams.contains(key)) {
+                int labelX = entryRight - 70;
+                ctx.drawTextWithShadow(
+                        this.textRenderer,
+                        Text.literal("Requested"),
+                        labelX,
+                        entryTop + 6,
+                        0x55FF55
+                );
+            }
+
+            y += joinTeamEntryHeight;
+        }
+    }
+
+    private void renderPlayerLeaderRequestsView(DrawContext ctx, @Nullable ClientTeam myTeam) {
+        if (myTeam == null) return;
+
+        boolean isLeader = selfInfo != null
+                && !myTeam.members.isEmpty()
+                && myTeam.members.get(0).uuid.equals(selfInfo.uuid);
+
+        if (!isLeader) {
+            ctx.drawCenteredTextWithShadow(
+                    this.textRenderer,
+                    Text.literal("Only the team leader can view join requests."),
+                    this.width / 2,
+                    this.height / 2,
+                    0xAAAAAA
+            );
+            return;
+        }
+
+        ctx.drawCenteredTextWithShadow(
+                this.textRenderer,
+                Text.literal("Join Requests for " + myTeam.name),
+                this.width / 2,
+                30,
+                0xFFFFFF
+        );
+
+        int boxX = this.width / 2 - 180;
+        int boxY = 50;
+        int boxWidth = 360;
+        int boxHeight = this.height - boxY - 30;
+
+        ctx.fill(boxX, boxY, boxX + boxWidth, boxY + boxHeight, 0x80000000);
+
+        int y = boxY + 4 - leaderRequestsScroll;
+
+        for (ClientMember req : myTeam.joinRequests) {
+            int entryTop = y;
+            int entryBottom = y + leaderRequestsEntryHeight - 2;
+            if (entryBottom < boxY || entryTop > boxY + boxHeight) {
+                y += leaderRequestsEntryHeight;
+                continue;
+            }
+
+            int entryLeft = boxX + 4;
+            int entryRight = boxX + boxWidth - 4;
+            ctx.fill(entryLeft, entryTop, entryRight, entryBottom, 0x40FFFFFF);
+
+            int headSize = leaderRequestsEntryHeight - 6;
+            int headX = entryLeft + 4;
+            int headY = entryTop + 3;
+            drawPlayerHead(ctx, headX, headY, headSize, req.profile);
+
+            int textX = headX + headSize + 6;
+            ctx.drawTextWithShadow(
+                    this.textRenderer,
+                    Text.literal(req.name),
+                    textX,
+                    entryTop + 6,
+                    0xFFFFFF
+            );
+
+            // Accept / Reject buttons (just drawn; clicks handled separately)
+            int buttonWidth = 50;
+            int buttonHeight = leaderRequestsEntryHeight - 6;
+            int rejectX = entryRight - buttonWidth - 4;
+            int acceptX = rejectX - buttonWidth - 4;
+            int buttonY = entryTop + 3;
+
+            // Accept button (greyed if locked)
+            int acceptColor = myTeam.locked ? 0xFF555555 : 0xFF00AA00;
+            ctx.fill(acceptX, buttonY, acceptX + buttonWidth, buttonY + buttonHeight, acceptColor);
+            ctx.drawCenteredTextWithShadow(
+                    this.textRenderer,
+                    Text.literal("Accept"),
+                    acceptX + buttonWidth / 2,
+                    buttonY + (buttonHeight - this.textRenderer.fontHeight) / 2,
+                    0xFFFFFFFF
+            );
+
+            // Reject button (always active)
+            int rejectColor = 0xFFAA0000;
+            ctx.fill(rejectX, buttonY, rejectX + buttonWidth, buttonY + buttonHeight, rejectColor);
+            ctx.drawCenteredTextWithShadow(
+                    this.textRenderer,
+                    Text.literal("Reject"),
+                    rejectX + buttonWidth / 2,
+                    buttonY + (buttonHeight - this.textRenderer.fontHeight) / 2,
+                    0xFFFFFFFF
+            );
+
+            y += leaderRequestsEntryHeight;
+        }
+    }
+
+    private void renderPlayerTransferOwnershipView(DrawContext ctx, @Nullable ClientTeam myTeam) {
+        if (myTeam == null) return;
+
+        boolean isLeader = selfInfo != null
+                && !myTeam.members.isEmpty()
+                && myTeam.members.get(0).uuid.equals(selfInfo.uuid);
+
+        if (!isLeader) {
+            ctx.drawCenteredTextWithShadow(
+                    this.textRenderer,
+                    Text.literal("Only the team leader can transfer ownership."),
+                    this.width / 2,
+                    this.height / 2,
+                    0xAAAAAA
+            );
+            return;
+        }
+
+        ctx.drawCenteredTextWithShadow(
+                this.textRenderer,
+                Text.literal("Transfer Ownership of " + myTeam.name),
+                this.width / 2,
+                30,
+                0xFFFFFF
+        );
+
+        int boxX = this.width / 2 - 180;
+        int boxY = 50;
+        int boxWidth = 360;
+        int boxHeight = this.height - boxY - 30;
+
+        ctx.fill(boxX, boxY, boxX + boxWidth, boxY + boxHeight, 0x80000000);
+
+        int y = boxY + 4 - transferOwnershipScroll;
+
+        for (int i = 0; i < myTeam.members.size(); i++) {
+            ClientMember m = myTeam.members.get(i);
+
+            int entryTop = y;
+            int entryBottom = y + transferOwnershipEntryHeight - 2;
+            if (entryBottom < boxY || entryTop > boxY + boxHeight) {
+                y += transferOwnershipEntryHeight;
+                continue;
+            }
+
+            int entryLeft = boxX + 4;
+            int entryRight = boxX + boxWidth - 4;
+            ctx.fill(entryLeft, entryTop, entryRight, entryBottom, 0x40FFFFFF);
+
+            int headSize = transferOwnershipEntryHeight - 6;
+            int headX = entryLeft + 4;
+            int headY = entryTop + 3;
+            drawPlayerHead(ctx, headX, headY, headSize, m.profile);
+
+            int textX = headX + headSize + 6;
+            ctx.drawTextWithShadow(
+                    this.textRenderer,
+                    Text.literal(m.name + (i == 0 ? " (Current Leader)" : "")),
+                    textX,
+                    entryTop + 6,
+                    0xFFFFFF
+            );
+
+            y += transferOwnershipEntryHeight;
+        }
+
+        ctx.drawCenteredTextWithShadow(
+                this.textRenderer,
+                Text.literal("Click a member to make them the new leader."),
+                this.width / 2,
+                boxY + boxHeight + 4,
                 0xAAAAAA
         );
     }
@@ -836,6 +1474,12 @@ public class EnchainedTeamsScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (currentView == ViewMode.PLAYER && button == 0) {
+            if (handlePlayerClick(mouseX, mouseY)) {
+                return true;
+            }
+        }
+
         if (currentView == ViewMode.ADMIN_MAIN && button == 0) {
             handleAdminMainClick(mouseX, mouseY);
         }
@@ -853,6 +1497,218 @@ public class EnchainedTeamsScreen extends Screen {
         }
 
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    private boolean handlePlayerClick(double mouseX, double mouseY) {
+        ClientTeam myTeam = selfInfo != null ? selfInfo.team : null;
+
+        switch (playerSubView) {
+            case MAIN -> {
+                if (myTeam != null) {
+                    return handlePlayerTeamMainClick(mouseX, mouseY, myTeam);
+                }
+                // No team: buttons are regular widgets, so no extra handling needed
+                return false;
+            }
+            case JOIN_TEAM -> {
+                return handleJoinTeamClick(mouseX, mouseY);
+            }
+            case LEADER_REQUESTS -> {
+                return handleLeaderRequestsClick(mouseX, mouseY, myTeam);
+            }
+            case TRANSFER_OWNERSHIP -> {
+                return handleTransferOwnershipClick(mouseX, mouseY, myTeam);
+            }
+            default -> {
+                return false;
+            }
+        }
+    }
+
+    private boolean handlePlayerTeamMainClick(double mouseX, double mouseY, ClientTeam myTeam) {
+        if (selfInfo == null) return false;
+
+        boolean isLeader = !myTeam.members.isEmpty()
+                && myTeam.members.get(0).uuid.equals(selfInfo.uuid);
+
+        if (!isLeader || myTeam.locked) {
+            return false;
+        }
+
+        int listX = 10;
+        int listY = 50;
+        int listWidth = this.width / 2 - 20;
+        int listHeight = this.height - listY - 40;
+
+        if (mouseX < listX || mouseX > listX + listWidth || mouseY < listY || mouseY > listY + listHeight) {
+            return false;
+        }
+
+        int y = listY + 4 - playerMemberListScroll;
+
+        for (int i = 0; i < myTeam.members.size(); i++) {
+            ClientMember m = myTeam.members.get(i);
+            boolean memberIsLeader = (i == 0);
+
+            int entryTop = y;
+            int entryBottom = y + playerMemberEntryHeight - 2;
+
+            if (mouseY >= entryTop && mouseY <= entryBottom) {
+                if (memberIsLeader) {
+                    return false; // can't remove self here
+                }
+
+                int entryLeft = listX + 4;
+                int entryRight = listX + listWidth - 4;
+
+                int removeSize = 14;
+                int removeX = entryRight - removeSize - 4;
+                int removeY = entryTop + (playerMemberEntryHeight - removeSize) / 2;
+
+                if (mouseX >= removeX && mouseX <= removeX + removeSize && mouseY >= removeY && mouseY <= removeY + removeSize) {
+                    // remove player from team
+                    myTeam.members.remove(i);
+                    EnchainedNetworking.sendRemovePlayerFromTeam(m.uuid);
+                    return true;
+                }
+            }
+
+            y += playerMemberEntryHeight;
+        }
+
+        return false;
+    }
+
+    private boolean handleJoinTeamClick(double mouseX, double mouseY) {
+        int boxX = this.width / 2 - 150;
+        int boxY = 50;
+        int boxWidth = 300;
+        int boxHeight = this.height - boxY - 30;
+
+        if (mouseX < boxX || mouseX > boxX + boxWidth || mouseY < boxY || mouseY > boxY + boxHeight) {
+            return false;
+        }
+
+        int y = boxY + 4 - joinTeamScroll;
+
+        for (ClientTeam team : teams) {
+            int entryTop = y;
+            int entryBottom = y + joinTeamEntryHeight - 2;
+            if (mouseY >= entryTop && mouseY <= entryBottom) {
+                String key = team.name.toLowerCase(Locale.ROOT);
+                if (myPendingJoinTeams.contains(key)) {
+                    sendDebug("Already requested to join " + team.name);
+                    return true;
+                }
+
+                myPendingJoinTeams.add(key);
+                EnchainedNetworking.sendJoinTeamRequest(team.name);
+                return true;
+            }
+            y += joinTeamEntryHeight;
+        }
+
+        return false;
+    }
+
+    private boolean handleLeaderRequestsClick(double mouseX, double mouseY, @Nullable ClientTeam myTeam) {
+        if (myTeam == null || selfInfo == null) return false;
+
+        boolean isLeader = !myTeam.members.isEmpty()
+                && myTeam.members.get(0).uuid.equals(selfInfo.uuid);
+        if (!isLeader) return false;
+
+        int boxX = this.width / 2 - 180;
+        int boxY = 50;
+        int boxWidth = 360;
+        int boxHeight = this.height - boxY - 30;
+
+        if (mouseX < boxX || mouseX > boxX + boxWidth || mouseY < boxY || mouseY > boxY + boxHeight) {
+            return false;
+        }
+
+        int y = boxY + 4 - leaderRequestsScroll;
+
+        for (int i = 0; i < myTeam.joinRequests.size(); i++) {
+            ClientMember req = myTeam.joinRequests.get(i);
+
+            int entryTop = y;
+            int entryBottom = y + leaderRequestsEntryHeight - 2;
+            if (mouseY >= entryTop && mouseY <= entryBottom) {
+                int entryLeft = boxX + 4;
+                int entryRight = boxX + boxWidth - 4;
+
+                int buttonWidth = 50;
+                int buttonHeight = leaderRequestsEntryHeight - 6;
+                int rejectX = entryRight - buttonWidth - 4;
+                int acceptX = rejectX - buttonWidth - 4;
+                int buttonY = entryTop + 3;
+
+                boolean onAccept = mouseX >= acceptX && mouseX <= acceptX + buttonWidth
+                        && mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
+                boolean onReject = mouseX >= rejectX && mouseX <= rejectX + buttonWidth
+                        && mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
+
+                if (onAccept && !myTeam.locked) {
+                    EnchainedNetworking.sendAcceptJoinRequest(myTeam.name, req.uuid);
+                    // locally move them into team members
+                    myTeam.joinRequests.remove(i);
+                    myTeam.members.add(req);
+                    return true;
+                }
+                if (onReject) {
+                    EnchainedNetworking.sendRejectJoinRequest(myTeam.name, req.uuid);
+                    myTeam.joinRequests.remove(i);
+                    return true;
+                }
+            }
+
+            y += leaderRequestsEntryHeight;
+        }
+
+        return false;
+    }
+
+    private boolean handleTransferOwnershipClick(double mouseX, double mouseY, @Nullable ClientTeam myTeam) {
+        if (myTeam == null || selfInfo == null) return false;
+
+        boolean isLeader = !myTeam.members.isEmpty()
+                && myTeam.members.get(0).uuid.equals(selfInfo.uuid);
+        if (!isLeader) return false;
+
+        int boxX = this.width / 2 - 180;
+        int boxY = 50;
+        int boxWidth = 360;
+        int boxHeight = this.height - boxY - 30;
+
+        if (mouseX < boxX || mouseX > boxX + boxWidth || mouseY < boxY || mouseY > boxY + boxHeight) {
+            return false;
+        }
+
+        int y = boxY + 4 - transferOwnershipScroll;
+
+        for (int i = 0; i < myTeam.members.size(); i++) {
+            ClientMember m = myTeam.members.get(i);
+
+            int entryTop = y;
+            int entryBottom = y + transferOwnershipEntryHeight - 2;
+            if (mouseY >= entryTop && mouseY <= entryBottom) {
+                if (i == 0) {
+                    sendDebug("You are already the leader.");
+                    return true;
+                }
+
+                EnchainedNetworking.sendTransferOwnership(myTeam.name, m.uuid);
+                // let server handle actual leader change; we'll see it on next sync
+                playerSubView = PlayerSubView.MAIN;
+                rebuildView();
+                return true;
+            }
+
+            y += transferOwnershipEntryHeight;
+        }
+
+        return false;
     }
 
     @Override
@@ -918,6 +1774,69 @@ public class EnchainedTeamsScreen extends Screen {
                     int max = Math.max(0, allPlayers.size() * addPlayerEntryHeight - listHeight);
                     addPlayerScroll = Math.max(0, Math.min(max, addPlayerScroll + scroll));
                     return true;
+                }
+            }
+            case PLAYER -> {
+                ClientTeam myTeam = selfInfo != null ? selfInfo.team : null;
+
+                switch (playerSubView) {
+                    case MAIN -> {
+                        if (myTeam != null) {
+                            int listX = 10;
+                            int listY = 50;
+                            int listWidth = this.width / 2 - 20;
+                            int listHeight = this.height - listY - 40;
+
+                            if (mouseX >= listX && mouseX <= listX + listWidth && mouseY >= listY && mouseY <= listY + listHeight) {
+                                int max = Math.max(0, myTeam.members.size() * playerMemberEntryHeight - listHeight);
+                                playerMemberListScroll = Math.max(0, Math.min(max, playerMemberListScroll + scroll));
+                                return true;
+                            }
+                        }
+                    }
+                    case JOIN_TEAM -> {
+                        int boxX = this.width / 2 - 150;
+                        int boxY = 50;
+                        int boxWidth = 300;
+                        int boxHeight = this.height - boxY - 30;
+
+                        if (mouseX >= boxX && mouseX <= boxX + boxWidth && mouseY >= boxY && mouseY <= boxY + boxHeight) {
+                            int max = Math.max(0, teams.size() * joinTeamEntryHeight - boxHeight);
+                            joinTeamScroll = Math.max(0, Math.min(max, joinTeamScroll + scroll));
+                            return true;
+                        }
+                    }
+                    case LEADER_REQUESTS -> {
+                        ClientTeam team = myTeam;
+                        if (team != null) {
+                            int boxX = this.width / 2 - 180;
+                            int boxY = 50;
+                            int boxWidth = 360;
+                            int boxHeight = this.height - boxY - 30;
+
+                            if (mouseX >= boxX && mouseX <= boxX + boxWidth && mouseY >= boxY && mouseY <= boxY + boxHeight) {
+                                int max = Math.max(0, team.joinRequests.size() * leaderRequestsEntryHeight - boxHeight);
+                                leaderRequestsScroll = Math.max(0, Math.min(max, leaderRequestsScroll + scroll));
+                                return true;
+                            }
+                        }
+                    }
+                    case TRANSFER_OWNERSHIP -> {
+                        ClientTeam team = myTeam;
+                        if (team != null) {
+                            int boxX = this.width / 2 - 180;
+                            int boxY = 50;
+                            int boxWidth = 360;
+                            int boxHeight = this.height - boxY - 30;
+
+                            if (mouseX >= boxX && mouseX <= boxX + boxWidth && mouseY >= boxY && mouseY <= boxY + boxHeight) {
+                                int max = Math.max(0, team.members.size() * transferOwnershipEntryHeight - boxHeight);
+                                transferOwnershipScroll = Math.max(0, Math.min(max, transferOwnershipScroll + scroll));
+                                return true;
+                            }
+                        }
+                    }
+                    default -> {}
                 }
             }
         }
@@ -1143,6 +2062,8 @@ public class EnchainedTeamsScreen extends Screen {
         int color; // 0xRRGGBB
         boolean locked = false;
         final List<ClientMember> members = new ArrayList<>();
+        // players who requested to join this team (leader view)
+        final List<ClientMember> joinRequests = new ArrayList<>();
 
         ClientTeam(String name, int color) {
             this.name = name;

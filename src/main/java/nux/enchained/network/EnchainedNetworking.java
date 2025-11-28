@@ -25,12 +25,23 @@ public final class EnchainedNetworking {
 
     // C2S
     public static final Identifier C2S_REQUEST_FULL_SYNC = new Identifier(MODID, "teams_request_full");
+    // Admin create: empty team, no leader
     public static final Identifier C2S_CREATE_TEAM       = new Identifier(MODID, "teams_create");
+    // Player create: creator becomes leader & member
+    public static final Identifier C2S_CREATE_TEAM_SELF  = new Identifier(MODID, "teams_create_self");
+
     public static final Identifier C2S_DISBAND_TEAM      = new Identifier(MODID, "teams_disband");
     public static final Identifier C2S_SET_LOCKED        = new Identifier(MODID, "teams_set_locked");
     public static final Identifier C2S_MOVE_PLAYER       = new Identifier(MODID, "teams_move_player");
     public static final Identifier C2S_REMOVE_PLAYER     = new Identifier(MODID, "teams_remove_player");
     public static final Identifier C2S_SET_LEADER        = new Identifier(MODID, "teams_set_leader");
+
+    // NEW player-side packets
+    public static final Identifier C2S_JOIN_TEAM_REQUEST = new Identifier(MODID, "teams_join_request");
+    public static final Identifier C2S_LEAVE_TEAM        = new Identifier(MODID, "teams_leave");
+    public static final Identifier C2S_ACCEPT_JOIN       = new Identifier(MODID, "teams_accept_join");
+    public static final Identifier C2S_REJECT_JOIN       = new Identifier(MODID, "teams_reject_join");
+    public static final Identifier C2S_TRANSFER_OWNER    = new Identifier(MODID, "teams_transfer_owner");
 
     // S2C
     public static final Identifier S2C_FULL_SYNC         = new Identifier(MODID, "teams_full_sync");
@@ -47,13 +58,15 @@ public final class EnchainedNetworking {
         public final boolean locked;
         public final UUID leader;    // may be null
         public final List<UUID> members;
+        public final List<UUID> joinRequests;
 
-        public TeamSnapshot(String name, int color, boolean locked, UUID leader, List<UUID> members) {
+        public TeamSnapshot(String name, int color, boolean locked, UUID leader, List<UUID> members, List<UUID> joinRequests) {
             this.name = name;
             this.color = color;
             this.locked = locked;
             this.leader = leader;
             this.members = members;
+            this.joinRequests = joinRequests;
         }
     }
 
@@ -88,6 +101,14 @@ public final class EnchainedNetworking {
                     final String name = buf.readString(64);
                     final int color   = buf.readInt();
                     server.execute(() -> handleCreateTeamC2S(server, player, name, color));
+                });
+
+        // CREATE TEAM (player panel: creator becomes leader)
+        ServerPlayNetworking.registerGlobalReceiver(C2S_CREATE_TEAM_SELF,
+                (server, player, handler, buf, responseSender) -> {
+                    final String name = buf.readString(64);
+                    final int color   = buf.readInt();
+                    server.execute(() -> handleCreateTeamSelfC2S(server, player, name, color));
                 });
 
         // DISBAND TEAM
@@ -127,6 +148,43 @@ public final class EnchainedNetworking {
                     final UUID newLeader  = buf.readUuid();
                     server.execute(() -> handleSetLeaderC2S(server, player, teamName, newLeader));
                 });
+
+        // JOIN TEAM REQUEST
+        ServerPlayNetworking.registerGlobalReceiver(C2S_JOIN_TEAM_REQUEST,
+                (server, player, handler, buf, responseSender) -> {
+                    final String teamName = buf.readString(64);
+                    server.execute(() -> handleJoinTeamRequestC2S(server, player, teamName));
+                });
+
+        // LEAVE TEAM
+        ServerPlayNetworking.registerGlobalReceiver(C2S_LEAVE_TEAM,
+                (server, player, handler, buf, responseSender) ->
+                        server.execute(() -> handleLeaveTeamC2S(server, player))
+        );
+
+        // ACCEPT JOIN REQUEST (leader only)
+        ServerPlayNetworking.registerGlobalReceiver(C2S_ACCEPT_JOIN,
+                (server, player, handler, buf, responseSender) -> {
+                    final String teamName = buf.readString(64);
+                    final UUID joining = buf.readUuid();
+                    server.execute(() -> handleAcceptJoinC2S(server, player, teamName, joining));
+                });
+
+        // REJECT JOIN REQUEST (leader only)
+        ServerPlayNetworking.registerGlobalReceiver(C2S_REJECT_JOIN,
+                (server, player, handler, buf, responseSender) -> {
+                    final String teamName = buf.readString(64);
+                    final UUID joining = buf.readUuid();
+                    server.execute(() -> handleRejectJoinC2S(server, player, teamName, joining));
+                });
+
+        // TRANSFER OWNERSHIP (leader only)
+        ServerPlayNetworking.registerGlobalReceiver(C2S_TRANSFER_OWNER,
+                (server, player, handler, buf, responseSender) -> {
+                    final String teamName = buf.readString(64);
+                    final UUID newLeader = buf.readUuid();
+                    server.execute(() -> handleTransferOwnerC2S(server, player, teamName, newLeader));
+                });
     }
 
     public static void registerClientReceivers() {
@@ -156,6 +214,17 @@ public final class EnchainedNetworking {
         buf.writeString(name);
         buf.writeInt(color);
         ClientPlayNetworking.send(C2S_CREATE_TEAM, buf);
+    }
+
+    /**
+     * Create a team and automatically make the sender the leader/member.
+     * Used by the PLAYER view "Create Team" flow.
+     */
+    public static void sendCreateTeamSelf(String name, int color) {
+        PacketByteBuf buf = PacketByteBufs.create();
+        buf.writeString(name);
+        buf.writeInt(color);
+        ClientPlayNetworking.send(C2S_CREATE_TEAM_SELF, buf);
     }
 
     public static void sendDisbandTeam(String name) {
@@ -203,18 +272,132 @@ public final class EnchainedNetworking {
                                             ServerPlayerEntity sender,
                                             String name,
                                             int color) {
+        // ADMIN PANEL: still admin-only, no leader
         if (!isAdmin(sender)) return;
 
         TeamManager manager = TeamManager.get(server);
 
-        // Pass `null` for leader so the team starts empty.
         boolean ok = manager.createTeam(name, null, color);
         if (!ok) {
             sender.sendMessage(Text.literal("[Enchained] A team with that name already exists."), false);
             return;
         }
 
-        // Broadcast updated team state to everyone
+        sendFullSyncToAll(server);
+    }
+
+    private static void handleCreateTeamSelfC2S(MinecraftServer server,
+                                                ServerPlayerEntity sender,
+                                                String name,
+                                                int color) {
+        // PLAYER PANEL: ANYONE can use this, including admins using the Player tab.
+        TeamManager manager = TeamManager.get(server);
+        UUID self = sender.getUuid();
+
+        // Already in a team? Don't allow creating a new one.
+        if (manager.isInTeam(self)) {
+            sender.sendMessage(Text.literal("[Enchained] You are already in a team."), false);
+            return;
+        }
+
+        // This creates the team *and* sets `self` as leader, auto-added as member
+        boolean ok = manager.createTeam(name, self, color);
+        if (!ok) {
+            sender.sendMessage(Text.literal("[Enchained] A team with that name already exists."), false);
+            return;
+        }
+
+        sendFullSyncToAll(server);
+    }
+
+    private static void handleJoinTeamRequestC2S(MinecraftServer server,
+                                                 ServerPlayerEntity sender,
+                                                 String teamName) {
+        TeamManager manager = TeamManager.get(server);
+        UUID self = sender.getUuid();
+
+        // Already in a team? no-op
+        if (manager.getTeamOfPlayer(self).isPresent()) {
+            sender.sendMessage(Text.literal("[Enchained] You are already in a team."), false);
+            return;
+        }
+
+        // Add a join request on that team
+        boolean ok = manager.addJoinRequest(teamName, self);
+        if (!ok) {
+            sender.sendMessage(Text.literal("[Enchained] Could not request to join team '" + teamName + "'."), false);
+            return;
+        }
+
+        sendFullSyncToAll(server);
+    }
+
+    private static void handleLeaveTeamC2S(MinecraftServer server,
+                                           ServerPlayerEntity sender) {
+        TeamManager manager = TeamManager.get(server);
+        UUID self = sender.getUuid();
+
+        // Optional: respect "locked" on the server too
+        if (!manager.canLeave(self)) {
+            sender.sendMessage(Text.literal("[Enchained] Your team is locked; you cannot leave."), false);
+            return;
+        }
+
+        manager.removePlayerFromTeam(self);
+        sendFullSyncToAll(server);
+    }
+
+    private static void handleAcceptJoinC2S(MinecraftServer server,
+                                            ServerPlayerEntity sender,
+                                            String teamName,
+                                            UUID joining) {
+        TeamManager manager = TeamManager.get(server);
+        UUID leaderId = sender.getUuid();
+
+        if (!manager.isLeader(teamName, leaderId)) {
+            return; // not leader -> ignore
+        }
+
+        if (manager.isLocked(teamName)) {
+            // leader can't accept when locked; GUI should already grey this out
+            sender.sendMessage(Text.literal("[Enchained] Team is locked; cannot accept new members."), false);
+            return;
+        }
+
+        // Remove request, then move player into the team
+        manager.removeJoinRequest(teamName, joining);
+        manager.movePlayerToTeam(teamName, joining);
+
+        sendFullSyncToAll(server);
+    }
+
+    private static void handleRejectJoinC2S(MinecraftServer server,
+                                            ServerPlayerEntity sender,
+                                            String teamName,
+                                            UUID joining) {
+        TeamManager manager = TeamManager.get(server);
+        UUID leaderId = sender.getUuid();
+
+        if (!manager.isLeader(teamName, leaderId)) {
+            return;
+        }
+
+        manager.removeJoinRequest(teamName, joining);
+        sendFullSyncToAll(server);
+    }
+
+    private static void handleTransferOwnerC2S(MinecraftServer server,
+                                               ServerPlayerEntity sender,
+                                               String teamName,
+                                               UUID newLeader) {
+        TeamManager manager = TeamManager.get(server);
+        UUID leaderId = sender.getUuid();
+
+        if (!manager.isLeader(teamName, leaderId)) {
+            return;
+        }
+
+        manager.setLeader(teamName, newLeader);
         sendFullSyncToAll(server);
     }
 
@@ -290,12 +473,16 @@ public final class EnchainedNetworking {
         List<TeamSnapshot> teams = new ArrayList<>();
         for (TeamData t : manager.getAllTeams()) {
             List<UUID> members = new ArrayList<>(t.getMembers());
+
+            List<UUID> joinRequests = new ArrayList<>(t.getJoinRequests());
+
             teams.add(new TeamSnapshot(
                     t.getName(),
                     t.getColor(),
                     t.isLocked(),
                     t.getLeader(),
-                    members
+                    members,
+                    joinRequests
             ));
         }
 
@@ -339,9 +526,15 @@ public final class EnchainedNetworking {
                 buf.writeUuid(t.leader);
             }
 
+            // members
             buf.writeVarInt(t.members.size());
             for (UUID m : t.members) {
                 buf.writeUuid(m);
+            }
+
+            buf.writeVarInt(t.joinRequests.size());
+            for (UUID r : t.joinRequests) {
+                buf.writeUuid(r);
             }
         }
     }
@@ -360,13 +553,21 @@ public final class EnchainedNetworking {
                 leader = buf.readUuid();
             }
 
+            // members
             int mCount = buf.readVarInt();
             List<UUID> members = new ArrayList<>(mCount);
             for (int j = 0; j < mCount; j++) {
                 members.add(buf.readUuid());
             }
 
-            list.add(new TeamSnapshot(name, color, locked, leader, members));
+            // join requests
+            int rCount = buf.readVarInt();
+            List<UUID> joinRequests = new ArrayList<>(rCount);
+            for (int j = 0; j < rCount; j++) {
+                joinRequests.add(buf.readUuid());
+            }
+
+            list.add(new TeamSnapshot(name, color, locked, leader, members, joinRequests));
         }
         return list;
     }
@@ -397,5 +598,36 @@ public final class EnchainedNetworking {
             list.add(new PlayerSnapshot(uuid, name, teamName));
         }
         return list;
+    }
+
+    public static void sendLeaveTeam() {
+        ClientPlayNetworking.send(C2S_LEAVE_TEAM, PacketByteBufs.empty());
+    }
+
+    public static void sendJoinTeamRequest(String teamName) {
+        PacketByteBuf buf = PacketByteBufs.create();
+        buf.writeString(teamName);
+        ClientPlayNetworking.send(C2S_JOIN_TEAM_REQUEST, buf);
+    }
+
+    public static void sendAcceptJoinRequest(String teamName, UUID playerId) {
+        PacketByteBuf buf = PacketByteBufs.create();
+        buf.writeString(teamName);
+        buf.writeUuid(playerId);
+        ClientPlayNetworking.send(C2S_ACCEPT_JOIN, buf);
+    }
+
+    public static void sendRejectJoinRequest(String teamName, UUID playerId) {
+        PacketByteBuf buf = PacketByteBufs.create();
+        buf.writeString(teamName);
+        buf.writeUuid(playerId);
+        ClientPlayNetworking.send(C2S_REJECT_JOIN, buf);
+    }
+
+    public static void sendTransferOwnership(String teamName, UUID newLeader) {
+        PacketByteBuf buf = PacketByteBufs.create();
+        buf.writeString(teamName);
+        buf.writeUuid(newLeader);
+        ClientPlayNetworking.send(C2S_TRANSFER_OWNER, buf);
     }
 }

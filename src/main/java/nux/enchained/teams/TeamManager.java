@@ -22,13 +22,15 @@ public class TeamManager extends PersistentState {
 
     public static final String SAVE_NAME = "enchained_teams";
 
-    private final Map<String, TeamData> teamsByName = new HashMap<>();
-    private final Map<UUID, String> teamByPlayer = new HashMap<>();
+    private final Map<String, TeamData> teamsByName = new HashMap<>(); // key = lowercase name
+    private final Map<UUID, String> teamByPlayer = new HashMap<>();    // player -> team key
 
     public TeamManager() {
     }
 
-    // ---------- Static accessors ----------
+    // ------------------------
+    // Static accessors
+    // ------------------------
 
     /**
      * Get the TeamManager for the server (using the overworld's PersistentStateManager).
@@ -55,7 +57,9 @@ public class TeamManager extends PersistentState {
         return manager;
     }
 
-    // ---------- Persistence ----------
+    // ------------------------
+    // Persistence
+    // ------------------------
 
     @Override
     public NbtCompound writeNbt(NbtCompound nbt) {
@@ -72,11 +76,19 @@ public class TeamManager extends PersistentState {
             // Store color
             t.putInt("Color", team.getColor());
 
+            // Members
             NbtList membersList = new NbtList();
             for (UUID member : team.getMembers()) {
                 membersList.add(NbtString.of(member.toString()));
             }
             t.put("Members", membersList);
+
+            // Join requests
+            NbtList joinReqList = new NbtList();
+            for (UUID req : team.getJoinRequests()) {
+                joinReqList.add(NbtString.of(req.toString()));
+            }
+            t.put("JoinRequests", joinReqList);
 
             teamList.add(t);
         }
@@ -99,13 +111,13 @@ public class TeamManager extends PersistentState {
             String leaderStr = teamTag.getString("Leader");
             UUID leader = leaderStr.isEmpty() ? null : UUID.fromString(leaderStr);
 
-            // Color is optional for backwards-compatibility
             int color = teamTag.contains("Color", NbtElement.INT_TYPE)
                     ? teamTag.getInt("Color")
                     : 0xFFFFFF;
 
             TeamData team = new TeamData(name, leader, locked, color);
 
+            // Members
             NbtList membersList = teamTag.getList("Members", NbtElement.STRING_TYPE);
             for (NbtElement mElem : membersList) {
                 String uuidStr = mElem.asString();
@@ -117,11 +129,26 @@ public class TeamManager extends PersistentState {
                 }
             }
 
+            // Join requests (optional)
+            if (teamTag.contains("JoinRequests", NbtElement.LIST_TYPE)) {
+                NbtList joinReqList = teamTag.getList("JoinRequests", NbtElement.STRING_TYPE);
+                for (NbtElement rElem : joinReqList) {
+                    String uuidStr = rElem.asString();
+                    try {
+                        UUID uuid = UUID.fromString(uuidStr);
+                        team.addJoinRequest(uuid);
+                    } catch (IllegalArgumentException ignored) {
+                    }
+                }
+            }
+
             teamsByName.put(name.toLowerCase(Locale.ROOT), team);
         }
     }
 
-    // ---------- Query methods ----------
+    // ------------------------
+    // Query methods
+    // ------------------------
 
     public Optional<TeamData> getTeamByName(String name) {
         if (name == null) return Optional.empty();
@@ -142,7 +169,9 @@ public class TeamManager extends PersistentState {
         return Collections.unmodifiableCollection(teamsByName.values());
     }
 
-    // ---------- Modification methods ----------
+    // ------------------------
+    // Modification methods
+    // ------------------------
 
     /**
      * Create a new team. If leader is null, the team starts empty.
@@ -157,7 +186,6 @@ public class TeamManager extends PersistentState {
         teamsByName.put(key, team);
 
         if (leader != null) {
-            // Ensure the player mapping points to this team
             teamByPlayer.put(leader, key);
         }
 
@@ -172,10 +200,12 @@ public class TeamManager extends PersistentState {
             return false;
         }
 
+        // Clear player -> team mapping
         for (UUID member : team.getMembers()) {
             teamByPlayer.remove(member);
         }
 
+        // Join requests don’t map into teamByPlayer, so nothing else to clear
         markDirty();
         return true;
     }
@@ -199,7 +229,7 @@ public class TeamManager extends PersistentState {
 
     /**
      * Remove a player from whatever team they are in.
-     * NOTE: Teams are NOT deleted when empty anymore – they can remain empty.
+     * Teams are NOT deleted when empty – they can remain empty.
      */
     public boolean removePlayerFromTeam(UUID playerId) {
         String teamKey = teamByPlayer.remove(playerId);
@@ -219,6 +249,9 @@ public class TeamManager extends PersistentState {
             team.setLeader(null);
         }
 
+        // They might also have had a pending join request (we can safely clear)
+        team.removeJoinRequest(playerId);
+
         markDirty();
         return removed;
     }
@@ -228,7 +261,19 @@ public class TeamManager extends PersistentState {
      */
     public boolean movePlayerToTeam(String targetTeamName, UUID playerId) {
         removePlayerFromTeam(playerId);
-        return addPlayerToTeam(targetTeamName, playerId);
+
+        String key = targetTeamName.toLowerCase(Locale.ROOT);
+        TeamData team = teamsByName.get(key);
+        if (team != null) {
+            // Clear any join request on this team for that player
+            team.removeJoinRequest(playerId);
+        }
+
+        boolean ok = addPlayerToTeam(targetTeamName, playerId);
+        if (ok) {
+            markDirty();
+        }
+        return ok;
     }
 
     public boolean setLeader(String teamName, UUID newLeader) {
@@ -259,6 +304,93 @@ public class TeamManager extends PersistentState {
         TeamData team = teamsByName.get(teamName.toLowerCase(Locale.ROOT));
         return team != null && team.isLocked();
     }
+
+    // ------------------------
+    // Join Request methods
+    // ------------------------
+
+    /**
+     * Player asks to join a team.
+     * Fails if:
+     *  - team doesn't exist
+     *  - team is locked
+     *  - player is already in any team
+     *  - player already requested this team
+     */
+    public boolean addJoinRequest(String teamName, UUID playerId) {
+        if (teamName == null || playerId == null) return false;
+        String key = teamName.toLowerCase(Locale.ROOT);
+        TeamData team = teamsByName.get(key);
+        if (team == null) return false;
+
+        // Don't allow join requests on locked teams
+        if (team.isLocked()) return false;
+
+        // Already in a team? They should not be able to request.
+        if (isInTeam(playerId)) return false;
+
+        // Already requested this team?
+        if (team.hasJoinRequest(playerId)) return false;
+
+        boolean added = team.addJoinRequest(playerId);
+        if (added) {
+            markDirty();
+        }
+        return added;
+    }
+
+    /**
+     * Remove a join request from a team (accept or reject).
+     */
+    public boolean removeJoinRequest(String teamName, UUID playerId) {
+        if (teamName == null || playerId == null) return false;
+        String key = teamName.toLowerCase(Locale.ROOT);
+        TeamData team = teamsByName.get(key);
+        if (team == null) return false;
+
+        boolean removed = team.removeJoinRequest(playerId);
+        if (removed) {
+            markDirty();
+        }
+        return removed;
+    }
+
+    // ------------------------
+    // Role / rule helpers
+    // ------------------------
+
+    /**
+     * Whether the specified player is the leader of the given team.
+     */
+    public boolean isLeader(String teamName, UUID playerId) {
+        if (teamName == null || playerId == null) return false;
+        String key = teamName.toLowerCase(Locale.ROOT);
+        TeamData team = teamsByName.get(key);
+        if (team == null) return false;
+        UUID leader = team.getLeader();
+        return leader != null && leader.equals(playerId);
+    }
+
+    /**
+     * Whether a player is allowed to leave their current team.
+     * Current rule: if the team is locked, nobody can leave.
+     */
+    public boolean canLeave(UUID playerId) {
+        if (playerId == null) return false;
+
+        Optional<TeamData> opt = getTeamOfPlayer(playerId);
+        if (opt.isEmpty()) {
+            // Not in a team – nothing to leave; treat as allowed
+            return true;
+        }
+
+        TeamData team = opt.get();
+        return !team.isLocked();
+    }
+
+    // ------------------------
+    // Misc
+    // ------------------------
 
     public static String getSavePath(MinecraftServer server) {
         return server.getSavePath(WorldSavePath.ROOT)

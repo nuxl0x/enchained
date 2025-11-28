@@ -5,7 +5,8 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Represents a single team: name, color, leader, members, lock state.
+ * Represents a single team: name, color, leader, members, lock state,
+ * and pending join requests.
  */
 public class TeamData {
 
@@ -13,6 +14,7 @@ public class TeamData {
     private final int color;         // 0xRRGGBB
     private UUID leader;             // can be null
     private final Set<UUID> members = new HashSet<>();
+    private final Set<UUID> joinRequests = new HashSet<>();
     private boolean locked;
 
     public TeamData(String name, UUID leader, boolean locked, int color) {
@@ -21,11 +23,15 @@ public class TeamData {
         this.locked = locked;
         this.color = color;
 
-        // We still auto-add leader as member *if* provided.
+        // Auto-add leader as member if provided.
         if (leader != null) {
             this.members.add(leader);
         }
     }
+
+    // ------------------------
+    // Basic data
+    // ------------------------
 
     public String getName() {
         return name;
@@ -54,6 +60,10 @@ public class TeamData {
         this.locked = locked;
     }
 
+    // ------------------------
+    // Members
+    // ------------------------
+
     public Set<UUID> getMembers() {
         return members;
     }
@@ -72,5 +82,28 @@ public class TeamData {
 
     public boolean isEmpty() {
         return members.isEmpty();
+    }
+
+    // ------------------------
+    // Join Requests
+    // ------------------------
+
+    /**
+     * Players who have requested to join this team but are not yet members.
+     */
+    public Set<UUID> getJoinRequests() {
+        return joinRequests;
+    }
+
+    public boolean addJoinRequest(UUID uuid) {
+        return joinRequests.add(uuid);
+    }
+
+    public boolean removeJoinRequest(UUID uuid) {
+        return joinRequests.remove(uuid);
+    }
+
+    public boolean hasJoinRequest(UUID uuid) {
+        return joinRequests.contains(uuid);
     }
 }
