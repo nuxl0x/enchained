@@ -8,7 +8,7 @@ These range from simple Agreements, to Contracts, Charters, and further.
 This project is licensed under the MIT license.
 
 ### Credits
-nuxlox / nuxl0x - Developer 
-maxryan008 - Developer
+nuxlox / nuxl0x - Developer  
+maxryan008 - Developer  
 Callumari - Artist  
 Arathain - Inspiration (Charter Mod)  
