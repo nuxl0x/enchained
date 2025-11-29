@@ -16,6 +16,7 @@ public class TeamData {
     private final Set<UUID> members = new HashSet<>();
     private final Set<UUID> joinRequests = new HashSet<>();
     private boolean locked;
+    private boolean friendlyFireDisabled = false;
 
     public TeamData(String name, UUID leader, boolean locked, int color) {
         this.name = name;
@@ -58,6 +59,14 @@ public class TeamData {
 
     public void setLocked(boolean locked) {
         this.locked = locked;
+    }
+
+    public boolean isFriendlyFireDisabled() {
+        return friendlyFireDisabled;
+    }
+
+    public void setFriendlyFireDisabled(boolean disabled) {
+        this.friendlyFireDisabled = disabled;
     }
 
     // ------------------------

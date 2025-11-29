@@ -24,27 +24,30 @@ public final class EnchainedNetworking {
     public static final String MODID = "enchained";
 
     // C2S
-    public static final Identifier C2S_REQUEST_FULL_SYNC = new Identifier(MODID, "teams_request_full");
+    public static final Identifier C2S_REQUEST_FULL_SYNC      = new Identifier(MODID, "teams_request_full");
     // Admin create: empty team, no leader
-    public static final Identifier C2S_CREATE_TEAM       = new Identifier(MODID, "teams_create");
+    public static final Identifier C2S_CREATE_TEAM            = new Identifier(MODID, "teams_create");
     // Player create: creator becomes leader & member
-    public static final Identifier C2S_CREATE_TEAM_SELF  = new Identifier(MODID, "teams_create_self");
+    public static final Identifier C2S_CREATE_TEAM_SELF       = new Identifier(MODID, "teams_create_self");
 
-    public static final Identifier C2S_DISBAND_TEAM      = new Identifier(MODID, "teams_disband");
-    public static final Identifier C2S_SET_LOCKED        = new Identifier(MODID, "teams_set_locked");
-    public static final Identifier C2S_MOVE_PLAYER       = new Identifier(MODID, "teams_move_player");
-    public static final Identifier C2S_REMOVE_PLAYER     = new Identifier(MODID, "teams_remove_player");
-    public static final Identifier C2S_SET_LEADER        = new Identifier(MODID, "teams_set_leader");
+    public static final Identifier C2S_DISBAND_TEAM           = new Identifier(MODID, "teams_disband");
+    public static final Identifier C2S_SET_LOCKED             = new Identifier(MODID, "teams_set_locked");
+    public static final Identifier C2S_MOVE_PLAYER            = new Identifier(MODID, "teams_move_player");
+    public static final Identifier C2S_REMOVE_PLAYER          = new Identifier(MODID, "teams_remove_player");
+    public static final Identifier C2S_SET_LEADER             = new Identifier(MODID, "teams_set_leader");
 
-    // NEW player-side packets
-    public static final Identifier C2S_JOIN_TEAM_REQUEST = new Identifier(MODID, "teams_join_request");
-    public static final Identifier C2S_LEAVE_TEAM        = new Identifier(MODID, "teams_leave");
-    public static final Identifier C2S_ACCEPT_JOIN       = new Identifier(MODID, "teams_accept_join");
-    public static final Identifier C2S_REJECT_JOIN       = new Identifier(MODID, "teams_reject_join");
-    public static final Identifier C2S_TRANSFER_OWNER    = new Identifier(MODID, "teams_transfer_owner");
+    // Player-side packets
+    public static final Identifier C2S_JOIN_TEAM_REQUEST      = new Identifier(MODID, "teams_join_request");
+    public static final Identifier C2S_LEAVE_TEAM             = new Identifier(MODID, "teams_leave");
+    public static final Identifier C2S_ACCEPT_JOIN            = new Identifier(MODID, "teams_accept_join");
+    public static final Identifier C2S_REJECT_JOIN            = new Identifier(MODID, "teams_reject_join");
+    public static final Identifier C2S_TRANSFER_OWNER         = new Identifier(MODID, "teams_transfer_owner");
+
+    // NEW: per-team friendly fire toggle (leader uses this)
+    public static final Identifier C2S_SET_FRIENDLY_FIRE      = new Identifier(MODID, "teams_set_friendly_fire");
 
     // S2C
-    public static final Identifier S2C_FULL_SYNC         = new Identifier(MODID, "teams_full_sync");
+    public static final Identifier S2C_FULL_SYNC              = new Identifier(MODID, "teams_full_sync");
 
     private EnchainedNetworking() {}
 
@@ -59,14 +62,22 @@ public final class EnchainedNetworking {
         public final UUID leader;    // may be null
         public final List<UUID> members;
         public final List<UUID> joinRequests;
+        public final boolean friendlyFireDisabled;
 
-        public TeamSnapshot(String name, int color, boolean locked, UUID leader, List<UUID> members, List<UUID> joinRequests) {
+        public TeamSnapshot(String name,
+                            int color,
+                            boolean locked,
+                            UUID leader,
+                            List<UUID> members,
+                            List<UUID> joinRequests,
+                            boolean friendlyFireDisabled) {
             this.name = name;
             this.color = color;
             this.locked = locked;
             this.leader = leader;
             this.members = members;
             this.joinRequests = joinRequests;
+            this.friendlyFireDisabled = friendlyFireDisabled;
         }
     }
 
@@ -185,6 +196,14 @@ public final class EnchainedNetworking {
                     final UUID newLeader = buf.readUuid();
                     server.execute(() -> handleTransferOwnerC2S(server, player, teamName, newLeader));
                 });
+
+        // SET FRIENDLY FIRE (leader only)
+        ServerPlayNetworking.registerGlobalReceiver(C2S_SET_FRIENDLY_FIRE,
+                (server, player, handler, buf, responseSender) -> {
+                    final String teamName = buf.readString(64);
+                    final boolean disabled = buf.readBoolean();
+                    server.execute(() -> handleSetFriendlyFireC2S(server, player, teamName, disabled));
+                });
     }
 
     public static void registerClientReceivers() {
@@ -214,6 +233,17 @@ public final class EnchainedNetworking {
         buf.writeString(name);
         buf.writeInt(color);
         ClientPlayNetworking.send(C2S_CREATE_TEAM, buf);
+    }
+
+    /**
+     * NEW: toggle per-team friendly fire.
+     * `disabled = true` means team damage is prevented.
+     */
+    public static void sendSetTeamFriendlyFire(String teamName, boolean disabled) {
+        PacketByteBuf buf = PacketByteBufs.create();
+        buf.writeString(teamName);
+        buf.writeBoolean(disabled);
+        ClientPlayNetworking.send(C2S_SET_FRIENDLY_FIRE, buf);
     }
 
     /**
@@ -260,6 +290,37 @@ public final class EnchainedNetworking {
         ClientPlayNetworking.send(C2S_SET_LEADER, buf);
     }
 
+    public static void sendLeaveTeam() {
+        ClientPlayNetworking.send(C2S_LEAVE_TEAM, PacketByteBufs.empty());
+    }
+
+    public static void sendJoinTeamRequest(String teamName) {
+        PacketByteBuf buf = PacketByteBufs.create();
+        buf.writeString(teamName);
+        ClientPlayNetworking.send(C2S_JOIN_TEAM_REQUEST, buf);
+    }
+
+    public static void sendAcceptJoinRequest(String teamName, UUID playerId) {
+        PacketByteBuf buf = PacketByteBufs.create();
+        buf.writeString(teamName);
+        buf.writeUuid(playerId);
+        ClientPlayNetworking.send(C2S_ACCEPT_JOIN, buf);
+    }
+
+    public static void sendRejectJoinRequest(String teamName, UUID playerId) {
+        PacketByteBuf buf = PacketByteBufs.create();
+        buf.writeString(teamName);
+        buf.writeUuid(playerId);
+        ClientPlayNetworking.send(C2S_REJECT_JOIN, buf);
+    }
+
+    public static void sendTransferOwnership(String teamName, UUID newLeader) {
+        PacketByteBuf buf = PacketByteBufs.create();
+        buf.writeString(teamName);
+        buf.writeUuid(newLeader);
+        ClientPlayNetworking.send(C2S_TRANSFER_OWNER, buf);
+    }
+
     // =========================
     // Server handlers
     // =========================
@@ -272,7 +333,7 @@ public final class EnchainedNetworking {
                                             ServerPlayerEntity sender,
                                             String name,
                                             int color) {
-        // ADMIN PANEL: still admin-only, no leader
+        // ADMIN PANEL: admin-only, no leader
         if (!isAdmin(sender)) return;
 
         TeamManager manager = TeamManager.get(server);
@@ -337,7 +398,7 @@ public final class EnchainedNetworking {
         TeamManager manager = TeamManager.get(server);
         UUID self = sender.getUuid();
 
-        // Optional: respect "locked" on the server too
+        // respect "locked" on the server too
         if (!manager.canLeave(self)) {
             sender.sendMessage(Text.literal("[Enchained] Your team is locked; you cannot leave."), false);
             return;
@@ -459,6 +520,26 @@ public final class EnchainedNetworking {
         sendFullSyncToAll(server);
     }
 
+    /**
+     * leader toggles friendly fire on their own team.
+     */
+    private static void handleSetFriendlyFireC2S(MinecraftServer server,
+                                                 ServerPlayerEntity sender,
+                                                 String teamName,
+                                                 boolean disabled) {
+        TeamManager manager = TeamManager.get(server);
+        UUID requester = sender.getUuid();
+
+        // Security: only leader of this team may toggle.
+        if (!manager.isLeader(teamName, requester)) {
+            return;
+        }
+
+        manager.setFriendlyFireDisabled(teamName, disabled);
+
+        sendFullSyncToAll(server);
+    }
+
     // =========================
     // Full sync building
     // =========================
@@ -473,7 +554,6 @@ public final class EnchainedNetworking {
         List<TeamSnapshot> teams = new ArrayList<>();
         for (TeamData t : manager.getAllTeams()) {
             List<UUID> members = new ArrayList<>(t.getMembers());
-
             List<UUID> joinRequests = new ArrayList<>(t.getJoinRequests());
 
             teams.add(new TeamSnapshot(
@@ -482,7 +562,8 @@ public final class EnchainedNetworking {
                     t.isLocked(),
                     t.getLeader(),
                     members,
-                    joinRequests
+                    joinRequests,
+                    t.isFriendlyFireDisabled() // expose from TeamData
             ));
         }
 
@@ -532,10 +613,14 @@ public final class EnchainedNetworking {
                 buf.writeUuid(m);
             }
 
+            // join requests
             buf.writeVarInt(t.joinRequests.size());
             for (UUID r : t.joinRequests) {
                 buf.writeUuid(r);
             }
+
+            // friendly fire
+            buf.writeBoolean(t.friendlyFireDisabled);
         }
     }
 
@@ -567,7 +652,18 @@ public final class EnchainedNetworking {
                 joinRequests.add(buf.readUuid());
             }
 
-            list.add(new TeamSnapshot(name, color, locked, leader, members, joinRequests));
+            // friendly fire flag
+            boolean friendlyFireDisabled = buf.readBoolean();
+
+            list.add(new TeamSnapshot(
+                    name,
+                    color,
+                    locked,
+                    leader,
+                    members,
+                    joinRequests,
+                    friendlyFireDisabled
+            ));
         }
         return list;
     }
@@ -598,36 +694,5 @@ public final class EnchainedNetworking {
             list.add(new PlayerSnapshot(uuid, name, teamName));
         }
         return list;
-    }
-
-    public static void sendLeaveTeam() {
-        ClientPlayNetworking.send(C2S_LEAVE_TEAM, PacketByteBufs.empty());
-    }
-
-    public static void sendJoinTeamRequest(String teamName) {
-        PacketByteBuf buf = PacketByteBufs.create();
-        buf.writeString(teamName);
-        ClientPlayNetworking.send(C2S_JOIN_TEAM_REQUEST, buf);
-    }
-
-    public static void sendAcceptJoinRequest(String teamName, UUID playerId) {
-        PacketByteBuf buf = PacketByteBufs.create();
-        buf.writeString(teamName);
-        buf.writeUuid(playerId);
-        ClientPlayNetworking.send(C2S_ACCEPT_JOIN, buf);
-    }
-
-    public static void sendRejectJoinRequest(String teamName, UUID playerId) {
-        PacketByteBuf buf = PacketByteBufs.create();
-        buf.writeString(teamName);
-        buf.writeUuid(playerId);
-        ClientPlayNetworking.send(C2S_REJECT_JOIN, buf);
-    }
-
-    public static void sendTransferOwnership(String teamName, UUID newLeader) {
-        PacketByteBuf buf = PacketByteBufs.create();
-        buf.writeString(teamName);
-        buf.writeUuid(newLeader);
-        ClientPlayNetworking.send(C2S_TRANSFER_OWNER, buf);
     }
 }

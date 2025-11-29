@@ -76,6 +76,8 @@ public class TeamManager extends PersistentState {
             // Store color
             t.putInt("Color", team.getColor());
 
+            t.putBoolean("NoPvP", team.isFriendlyFireDisabled());
+
             // Members
             NbtList membersList = new NbtList();
             for (UUID member : team.getMembers()) {
@@ -116,6 +118,10 @@ public class TeamManager extends PersistentState {
                     : 0xFFFFFF;
 
             TeamData team = new TeamData(name, leader, locked, color);
+
+            if (teamTag.contains("NoPvP", NbtElement.BYTE_TYPE)) {
+                team.setFriendlyFireDisabled(teamTag.getBoolean("NoPvP"));
+            }
 
             // Members
             NbtList membersList = teamTag.getList("Members", NbtElement.STRING_TYPE);
@@ -386,6 +392,44 @@ public class TeamManager extends PersistentState {
 
         TeamData team = opt.get();
         return !team.isLocked();
+    }
+
+    // ------------------------
+    // Friendly-fire helpers
+    // ------------------------
+
+    /**
+     * Returns true if:
+     *  - both players are on the same team
+     *  - and that team has friendly fire disabled
+     */
+    public boolean shouldCancelFriendlyFire(UUID a, UUID b) {
+        if (a == null || b == null) return false;
+
+        String ta = teamByPlayer.get(a);
+        if (ta == null) return false;
+
+        String tb = teamByPlayer.get(b);
+        if (tb == null) return false;
+
+        if (!ta.equals(tb)) return false; // different teams
+
+        TeamData team = teamsByName.get(ta);
+        return team != null && team.isFriendlyFireDisabled();
+    }
+
+    public boolean areOnSameTeam(UUID a, UUID b) {
+        if (a == null || b == null) return false;
+        String ta = teamByPlayer.get(a);
+        String tb = teamByPlayer.get(b);
+        return ta != null && ta.equals(tb);
+    }
+
+    public void setFriendlyFireDisabled(String teamName, boolean disabled) {
+        TeamData team = teamsByName.get(teamName.toLowerCase(Locale.ROOT));
+        if (team != null) {
+            team.setFriendlyFireDisabled(disabled);
+        }
     }
 
     // ------------------------

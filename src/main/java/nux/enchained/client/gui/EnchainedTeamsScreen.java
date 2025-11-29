@@ -135,6 +135,7 @@ public class EnchainedTeamsScreen extends Screen {
     private ButtonWidget playerLeaveTeamButton;
     private ButtonWidget playerViewRequestsButton;
     private ButtonWidget playerTransferOwnerButton;
+    private ButtonWidget playerToggleFriendlyFireButton;
 
     public EnchainedTeamsScreen() {
         super(Text.literal("Enchained Teams"));
@@ -173,6 +174,7 @@ public class EnchainedTeamsScreen extends Screen {
         for (TeamSnapshot snap : teamSnapshots) {
             ClientTeam ct = new ClientTeam(snap.name, snap.color);
             ct.locked = snap.locked;
+            ct.friendlyFireDisabled = snap.friendlyFireDisabled;
             this.teams.add(ct);
             teamsByKey.put(snap.name.toLowerCase(Locale.ROOT), ct);
         }
@@ -339,6 +341,7 @@ public class EnchainedTeamsScreen extends Screen {
         playerLeaveTeamButton = null;
         playerViewRequestsButton = null;
         playerTransferOwnerButton = null;
+        playerToggleFriendlyFireButton = null;
         tmDisbandButton = null;
 
         // Recreate tabs (if admin)
@@ -877,6 +880,36 @@ public class EnchainedTeamsScreen extends Screen {
                 }).dimensions(baseX, baseY + buttonHeight + gap, buttonWidth, buttonHeight).build();
                 this.addDrawableChild(playerTransferOwnerButton);
             }
+
+            int ffButtonY = baseY + 2 * (buttonHeight + gap);
+            if (playerToggleFriendlyFireButton == null) {
+                playerToggleFriendlyFireButton = ButtonWidget.builder(Text.literal("Toggle Friendly Fire"), b -> {
+                    // flip local state for instant feedback
+                    myTeam.friendlyFireDisabled = !myTeam.friendlyFireDisabled;
+                    // tell server
+                    EnchainedNetworking.sendSetTeamFriendlyFire(myTeam.name, myTeam.friendlyFireDisabled);
+                }).dimensions(baseX, ffButtonY, buttonWidth, buttonHeight).build();
+                this.addDrawableChild(playerToggleFriendlyFireButton);
+            }
+
+            String statusText = myTeam.friendlyFireDisabled
+                    ? "Friendly fire is OFF"
+                    : "Friendly fire is ON";
+            int statusColor = myTeam.friendlyFireDisabled
+                    ? 0x55FF55   // red-ish
+                    : 0xFF5555;  // green-ish
+
+            int statusWidth = this.textRenderer.getWidth(statusText);
+            int statusX = baseX - 10 - statusWidth;
+            int statusY = ffButtonY + (buttonHeight - this.textRenderer.fontHeight) / 2;
+
+            ctx.drawTextWithShadow(
+                    this.textRenderer,
+                    Text.literal(statusText),
+                    statusX,
+                    statusY,
+                    statusColor
+            );
 
             // Disband button bottom-right
             if (tmDisbandButton == null || currentView != ViewMode.PLAYER) {
@@ -2064,6 +2097,7 @@ public class EnchainedTeamsScreen extends Screen {
         final List<ClientMember> members = new ArrayList<>();
         // players who requested to join this team (leader view)
         final List<ClientMember> joinRequests = new ArrayList<>();
+        boolean friendlyFireDisabled = false;
 
         ClientTeam(String name, int color) {
             this.name = name;
