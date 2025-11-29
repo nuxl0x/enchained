@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.networking.v1.PacketSender
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.network.ServerPlayNetworkHandler
+import nux.enchained.chat.TeamChatFormatter
 import nux.enchained.network.EnchainedNetworking
 import nux.enchained.teams.TeamDamageHandler
 import nux.enchained.teams.TeamManager
@@ -25,6 +26,7 @@ object Enchained : ModInitializer {
 
         EnchainedNetworking.registerServerReceivers()
         TeamDamageHandler.register()
+        TeamChatFormatter.register()
 
         ServerPlayConnectionEvents.JOIN.register(ServerPlayConnectionEvents.Join { handler: ServerPlayNetworkHandler?, sender: PacketSender?, server: MinecraftServer? ->
             val player = handler!!.player
