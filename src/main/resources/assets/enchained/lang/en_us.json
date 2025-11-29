@@ -11,7 +11,18 @@
   "item.enchained.bound_vow": "Bound Vow",
 
   "itemTooltip.enchained.primaryUser": "Bound to %s.",
-  "itemTooltip.enchained.secondaryUser": "Signed to %s.",
+  "itemTooltip.enchained.secondaryUser": "Signed by %s.",
+  "itemTooltip.enchained.agreementPrimaryUser": "Proposed by %s.",
+  "itemTooltip.enchained.agreementSecondaryUser": "Acknowledged by %s.",
+
+
+
+  "itemTooltip.enchained.agreement1": "Use in order to propose or acknowledge an agreement.",
+  "itemTooltip.enchained.agreement2": "Doing so will bind your name to this item.",
+  "itemTooltip.enchained.agreement3": "If undone, the agreement will be null.",
+
+  "itemTooltip.enchained.sAgreement1": "Represents a agreement between two signatories.",
+  "itemTooltip.enchained.sAgreement2": "You are able to see the names below.",
 
 
 
@@ -24,10 +35,19 @@
 
 
 
-  "itemTooltip.enchained.charter1": "A irreversible agreement.",
-  "itemTooltip.enchained.charter2": "An everlasting vow.",
+  "itemTooltip.enchained.charter1": "A powerful agreement.",
+  "itemTooltip.enchained.charter2": "An indestructible bond.",
   "itemTooltip.enchained.charter3": "By all means.",
 
-  "itemTooltip.enchained.bCharter1": "An agreement as irreversible as time.",
-  "itemTooltip.enchained.bCharter2": "A vow that will last beyond the end."
+  "itemTooltip.enchained.bCharter1": "An agreement, nearly irreversible.",
+  "itemTooltip.enchained.bCharter2": "A bond that will last beyond the end.",
+
+
+
+  "itemTooltip.enchained.vow1": "Inconceivably strong.",
+  "itemTooltip.enchained.vow2": "A vow that cannot be undone.",
+  "itemTooltip.enchained.vow3": "Through any means.",
+
+  "itemTooltip.enchained.bVow1": "An everlasting agreement.",
+  "itemTooltip.enchained.bVow2": "Free from time itself."
 }
