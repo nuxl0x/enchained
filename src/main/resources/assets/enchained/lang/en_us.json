@@ -49,5 +49,8 @@
   "itemTooltip.enchained.vow3": "Through any means.",
 
   "itemTooltip.enchained.bVow1": "An everlasting agreement.",
-  "itemTooltip.enchained.bVow2": "Free from time itself."
+  "itemTooltip.enchained.bVow2": "Free from time itself.",
+
+  "message.enchained.binding.same_team": "You may not sign this.",
+  "message.enchained.binding.three_way_forbidden": "3 way contracts are forbidden."
 }
