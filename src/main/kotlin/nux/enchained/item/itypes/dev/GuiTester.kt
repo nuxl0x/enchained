@@ -1,4 +1,4 @@
-package nux.enchained.util.itypes.dev
+package nux.enchained.item.itypes.dev
 
 import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.item.Item

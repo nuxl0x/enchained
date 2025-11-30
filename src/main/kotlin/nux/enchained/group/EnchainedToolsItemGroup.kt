@@ -10,19 +10,18 @@ import net.minecraft.registry.RegistryKey
 import net.minecraft.text.Text
 import net.minecraft.util.Identifier
 import nux.enchained.Enchained
-import nux.enchained.item.ArtifactItems
-import nux.enchained.item.BindingItems
+import nux.enchained.item.WeaponItems
 
-object EnchainedItemGroup {
+object EnchainedToolsItemGroup {
 
     // Declares Item Group Key
     val ENCHAINED_ITEM_GROUP_KEY: RegistryKey<ItemGroup> = RegistryKey.of(Registries.ITEM_GROUP.getKey(), Identifier(
-        Enchained.MOD_ID, "enchained"))
+        Enchained.MOD_ID, "enchained_tools"))
 
     // Builds Item Group
     val ENCHAINED_ITEM_GROUP: ItemGroup = FabricItemGroup.builder()
-        .icon { ItemStack(BindingItems.VOW) }
-        .displayName(Text.translatable("itemGroup.enchained"))
+        .icon { ItemStack(WeaponItems.VOW_BLADE) }
+        .displayName(Text.translatable("itemGroup.enchainedTools"))
         .build()
 
     // Function that registers the group
@@ -37,20 +36,9 @@ object EnchainedItemGroup {
 
         ItemGroupEvents.modifyEntriesEvent(ENCHAINED_ITEM_GROUP_KEY).register { itemGroup ->
 
-            // Binding Items
-            itemGroup.add(BindingItems.AGREEMENT)
-            itemGroup.add(BindingItems.SIGNED_AGREEMENT)
-            itemGroup.add(BindingItems.CONTRACT)
-            itemGroup.add(BindingItems.SIGNED_CONTRACT)
-            itemGroup.add(BindingItems.CHARTER)
-            itemGroup.add(BindingItems.BOUND_CHARTER)
-            itemGroup.add(BindingItems.VOW)
-            itemGroup.add(BindingItems.BOUND_VOW)
-
-            // Artifacts
-            itemGroup.add(ArtifactItems.STRENGTH_ARTIFACT)
-            itemGroup.add(ArtifactItems.SPEED_ARTIFACT)
-            itemGroup.add(ArtifactItems.RESISTANCE_ARTIFACT)
+            itemGroup.add(WeaponItems.CONTRACTOR_BLADE)
+            itemGroup.add(WeaponItems.CHARTER_BLADE)
+            itemGroup.add(WeaponItems.VOW_BLADE)
 
         }
 
@@ -60,5 +48,4 @@ object EnchainedItemGroup {
         registerItemGroup()
         addItemGroupItems()
     }
-
 }

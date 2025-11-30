@@ -1,4 +1,4 @@
-package nux.enchained.util.itypes
+package nux.enchained.item.itypes.binding
 
 import net.minecraft.client.item.TooltipContext
 import net.minecraft.entity.Entity

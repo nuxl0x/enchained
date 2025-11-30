@@ -1,4 +1,4 @@
-package nux.enchained.util.itypes
+package nux.enchained.item.itypes.binding
 
 import net.minecraft.client.item.TooltipContext
 import net.minecraft.entity.Entity
@@ -10,10 +10,10 @@ import net.minecraft.text.Text
 import net.minecraft.util.Formatting
 import net.minecraft.world.World
 import nux.enchained.item.BindingItems
-import nux.enchained.util.ITooltips.Contract
+import nux.enchained.util.ITooltips.Charter
 import nux.enchained.util.ITooltips.Misc
 
-class SignedContractItem(settings: Settings) : Item(settings) {
+class BoundCharterItem(settings: Settings) : Item(settings) {
 
     override fun inventoryTick(stack: ItemStack, world: World, entity: Entity, slot: Int, selected: Boolean) {
         BindingGraphUtil.clearSecondaryIfSameTeam(
@@ -22,7 +22,7 @@ class SignedContractItem(settings: Settings) : Item(settings) {
             entity as? ServerPlayerEntity,
             slot
         ) { nbt ->
-            val base = BindingItems.CONTRACT.defaultStack
+            val base = BindingItems.CHARTER.defaultStack
             base.nbt = nbt
             base
         }
@@ -30,8 +30,8 @@ class SignedContractItem(settings: Settings) : Item(settings) {
 
     override fun appendTooltip(stack: ItemStack, world: World?, tooltip: MutableList<Text>, context: TooltipContext) {
         val nbt: NbtCompound = stack.orCreateNbt
-        tooltip.add(Text.translatable(Contract.S_ONE))
-        tooltip.add(Text.translatable(Contract.S_TWO))
+        tooltip.add(Text.translatable(Charter.B_ONE))
+        tooltip.add(Text.translatable(Charter.B_TWO))
         if (nbt.contains("primaryUser") && nbt.contains("secondaryUser")) {
             val primaryUser: String = nbt.getString("primaryUser")
             val secondaryUser: String = nbt.getString("secondaryUser")

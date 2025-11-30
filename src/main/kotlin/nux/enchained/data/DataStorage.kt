@@ -74,4 +74,8 @@ class DataStorage : PersistentState() {
 
     }
 
+    fun getEntries(): MutableList<String> {
+        return storedData
+    }
+
 }

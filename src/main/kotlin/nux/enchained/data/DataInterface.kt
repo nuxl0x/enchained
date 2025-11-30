@@ -6,8 +6,8 @@ import nux.enchained.Enchained
 class DataInterface(
     world: ServerWorld,
     dataType: String,
-    primaryUser: String,
-    secondaryUser: String
+    private val primaryUser: String,
+    private val secondaryUser: String
 ) {
     val dataEntry = "$dataType-$primaryUser:$secondaryUser"
     val inverseDataEntry = "$dataType-$secondaryUser:$primaryUser"
@@ -15,12 +15,12 @@ class DataInterface(
 
     fun create(): Int {
         // Checks if both users are the same person.
-
-        // THIS CODE IS INTENTIONALLY COMMENTED OUT FOR TESTING
-        //if (primaryUser == secondaryUser) {
-        //    Enchained.LOGGER.error("Entry '$dataEntry' cannot have matching fields.")
-        //    return 1
-        //}
+        /**
+        if (primaryUser == secondaryUser) {
+            Enchained.LOGGER.error("Entry '$dataEntry' cannot have matching fields.")
+            return 1
+        }
+        **/
 
         // Checks if this entry already exists within the database.
         if (dataStorage.checkForEntry(dataEntry)) {
@@ -46,4 +46,10 @@ class DataInterface(
 
         return returnValue
     }
+
+    fun getAll(): MutableList<String> {
+        val allData: MutableList<String> = dataStorage.getEntries()
+        return allData
+    }
+
 }

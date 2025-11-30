@@ -14,9 +14,8 @@ class EnglishLanguageProvider(
         .filter { it.namespace == "enchained" }
         .mapNotNull { Registries.ITEM.get(it) }
 
-    fun formatItemName(item: Item): String {
-        val id = Registries.ITEM.getId(item).path
-        return id.split("_")
+    fun formatItemName(item: String): String {
+        return item.split("_")
             .joinToString(" ") { it ->
                 it.replaceFirstChar {
                 if (it.isLowerCase()) it.titlecase(getDefault()) else it.toString() } }
@@ -76,10 +75,18 @@ class EnglishLanguageProvider(
     ) {
         // Item Group
         tBuilder.add("itemGroup.enchained", "Enchained")
+        tBuilder.add("itemGroup.enchainedTools", "Enchained Tools")
 
         // Item Names
         allModItems.forEach { item ->
-            tBuilder.add(item, formatItemName(item))
+
+            val name = when (val itemId = Registries.ITEM.getId(item).path) {
+                "contractors_edge" -> "Contractor's Edge"
+                "vows_end" -> "Vow's End"
+                else -> formatItemName(itemId)
+            }
+
+            tBuilder.add(item, formatItemName(name))
         }
 
         // Tooltips

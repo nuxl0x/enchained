@@ -1,4 +1,4 @@
-package nux.enchained.util.itypes
+package nux.enchained.item.itypes.binding
 
 import net.minecraft.client.item.TooltipContext
 import net.minecraft.item.ItemStack
@@ -7,23 +7,23 @@ import net.minecraft.text.Text
 import net.minecraft.util.Formatting
 import net.minecraft.world.World
 import nux.enchained.item.BindingItems
-import nux.enchained.util.ITooltips.Contract
+import nux.enchained.util.ITooltips.Agreement
 import nux.enchained.util.ITooltips.Misc
 
-class ContractItem(settings: Settings) : TwoPartyBindingItem(
+class AgreementItem(settings: Settings) : TwoPartyBindingItem(
     settings,
-    "contract",
-    { BindingItems.SIGNED_CONTRACT.defaultStack }
+    "agreement",
+    { BindingItems.SIGNED_AGREEMENT.defaultStack }
 ) {
 
     override fun appendTooltip(stack: ItemStack, world: World?, tooltip: MutableList<Text>, context: TooltipContext) {
         val nbt: NbtCompound = stack.orCreateNbt
-        tooltip.add(Text.translatable(Contract.ONE))
-        tooltip.add(Text.translatable(Contract.TWO))
-        tooltip.add(Text.translatable(Contract.THREE))
+        tooltip.add(Text.translatable(Agreement.ONE))
+        tooltip.add(Text.translatable(Agreement.TWO))
+        tooltip.add(Text.translatable(Agreement.THREE))
         if (nbt.contains("primaryUser")) {
             val primaryUser: String = nbt.getString("primaryUser")
-            tooltip.add(Text.translatable(Misc.PRIM_USR, primaryUser).formatted(Formatting.GOLD))
+            tooltip.add(Text.translatable(Misc.A_PRIM_USR, primaryUser).formatted(Formatting.GOLD))
         }
         super.appendTooltip(stack, world, tooltip, context)
     }

@@ -14,6 +14,9 @@ import nux.enchained.util.IHelper
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
+/**
+ * If you wish to test the mod in singleplayer, ensure `TESTING` is set to true. This disables multiplayer checks.
+ */
 
 object Enchained : ModInitializer {
     const val MOD_ID: String = "enchained"
