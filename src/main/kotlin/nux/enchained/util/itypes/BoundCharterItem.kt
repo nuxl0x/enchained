@@ -10,6 +10,8 @@ import net.minecraft.text.Text
 import net.minecraft.util.Formatting
 import net.minecraft.world.World
 import nux.enchained.item.BindingItems
+import nux.enchained.util.ITooltips.Charter
+import nux.enchained.util.ITooltips.Misc
 
 class BoundCharterItem(settings: Settings) : Item(settings) {
 
@@ -28,13 +30,13 @@ class BoundCharterItem(settings: Settings) : Item(settings) {
 
     override fun appendTooltip(stack: ItemStack, world: World?, tooltip: MutableList<Text>, context: TooltipContext) {
         val nbt: NbtCompound = stack.orCreateNbt
-        tooltip.add(Text.translatable("itemTooltip.enchained.bCharter1"))
-        tooltip.add(Text.translatable("itemTooltip.enchained.bCharter2"))
+        tooltip.add(Text.translatable(Charter.B_ONE))
+        tooltip.add(Text.translatable(Charter.B_TWO))
         if (nbt.contains("primaryUser") && nbt.contains("secondaryUser")) {
             val primaryUser: String = nbt.getString("primaryUser")
             val secondaryUser: String = nbt.getString("secondaryUser")
-            tooltip.add(Text.translatable("itemTooltip.enchained.primaryUser", primaryUser).formatted(Formatting.GOLD))
-            tooltip.add(Text.translatable("itemTooltip.enchained.secondaryUser", secondaryUser).formatted(Formatting.DARK_RED))
+            tooltip.add(Text.translatable(Misc.PRIM_USR, primaryUser).formatted(Formatting.GOLD))
+            tooltip.add(Text.translatable(Misc.SCND_USR, secondaryUser).formatted(Formatting.DARK_RED))
         }
         super.appendTooltip(stack, world, tooltip, context)
     }

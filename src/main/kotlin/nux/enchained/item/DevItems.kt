@@ -1,0 +1,11 @@
+package nux.enchained.item
+
+import net.fabricmc.fabric.api.item.v1.FabricItemSettings
+import nux.enchained.util.IRegistrator
+import nux.enchained.util.itypes.dev.GuiTester
+
+object DevItems : IRegistrator() {
+
+    val GUI_TESTER = register("gui_tester", GuiTester(FabricItemSettings().maxCount(1)))
+
+}

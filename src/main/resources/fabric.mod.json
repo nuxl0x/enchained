@@ -6,11 +6,13 @@
 	"description": "Agreements. Shackles. Benefit. Ruin.",
 	"authors": [
 		"nuxlox / nuxl0x",
+        "maxryan008",
         "Callumari"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"homepage": "https://github.com/nuxl0x/enchained",
+		"sources": "https://github.com/nuxl0x/enchained/tree/main",
+        "issues": "https://github.com/nuxl0x/enchained/issues"
 	},
 	"license": "MIT",
 	"icon": "assets/enchained/icon.png",
@@ -23,7 +25,7 @@
 			}
 		],
         "client": [
-          "nux.enchained.client.EnchainedClient"
+          "nux.enchained.EnchainedClient"
         ],
 		"fabric-datagen": [
 			{

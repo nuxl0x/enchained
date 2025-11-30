@@ -10,6 +10,8 @@ import net.minecraft.text.Text
 import net.minecraft.util.Formatting
 import net.minecraft.world.World
 import nux.enchained.item.BindingItems
+import nux.enchained.util.ITooltips.Vow
+import nux.enchained.util.ITooltips.Misc
 
 class BoundVowItem(settings: Settings) : Item(settings) {
 
@@ -28,13 +30,13 @@ class BoundVowItem(settings: Settings) : Item(settings) {
 
     override fun appendTooltip(stack: ItemStack, world: World?, tooltip: MutableList<Text>, context: TooltipContext) {
         val nbt: NbtCompound = stack.orCreateNbt
-        tooltip.add(Text.translatable("itemTooltip.enchained.bVow1"))
-        tooltip.add(Text.translatable("itemTooltip.enchained.bVow2"))
+        tooltip.add(Text.translatable(Vow.B_ONE))
+        tooltip.add(Text.translatable(Vow.B_TWO))
         if (nbt.contains("primaryUser") && nbt.contains("secondaryUser")) {
             val primaryUser: String = nbt.getString("primaryUser")
             val secondaryUser: String = nbt.getString("secondaryUser")
-            tooltip.add(Text.translatable("itemTooltip.enchained.primaryUser", primaryUser).formatted(Formatting.GOLD))
-            tooltip.add(Text.translatable("itemTooltip.enchained.secondaryUser", secondaryUser).formatted(Formatting.DARK_RED))
+            tooltip.add(Text.translatable(Misc.PRIM_USR, primaryUser).formatted(Formatting.GOLD))
+            tooltip.add(Text.translatable(Misc.SCND_USR, secondaryUser).formatted(Formatting.DARK_RED))
         }
         super.appendTooltip(stack, world, tooltip, context)
     }

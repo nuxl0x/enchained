@@ -6,8 +6,8 @@ import nux.enchained.Enchained
 class DataInterface(
     world: ServerWorld,
     dataType: String,
-    private val primaryUser: String,
-    private val secondaryUser: String
+    primaryUser: String,
+    secondaryUser: String
 ) {
     val dataEntry = "$dataType-$primaryUser:$secondaryUser"
     val inverseDataEntry = "$dataType-$secondaryUser:$primaryUser"
@@ -15,6 +15,8 @@ class DataInterface(
 
     fun create(): Int {
         // Checks if both users are the same person.
+
+        // THIS CODE IS INTENTIONALLY COMMENTED OUT FOR TESTING
         //if (primaryUser == secondaryUser) {
         //    Enchained.LOGGER.error("Entry '$dataEntry' cannot have matching fields.")
         //    return 1
