@@ -7,6 +7,7 @@ import net.minecraft.text.Text
 import net.minecraft.util.Formatting
 import net.minecraft.world.World
 import nux.enchained.item.BindingItems
+import nux.enchained.util.Binding
 import nux.enchained.util.ITooltips.Agreement
 import nux.enchained.util.ITooltips.Misc
 
@@ -27,4 +28,5 @@ class AgreementItem(settings: Settings) : TwoPartyBindingItem(
         }
         super.appendTooltip(stack, world, tooltip, context)
     }
+
 }

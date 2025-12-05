@@ -10,6 +10,7 @@ import net.minecraft.text.Text
 import net.minecraft.util.Formatting
 import net.minecraft.world.World
 import nux.enchained.item.BindingItems
+import nux.enchained.util.BindingGraphUtil
 import nux.enchained.util.ITooltips.Contract
 import nux.enchained.util.ITooltips.Misc
 

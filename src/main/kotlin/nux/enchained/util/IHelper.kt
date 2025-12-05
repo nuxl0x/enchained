@@ -1,7 +1,7 @@
 package nux.enchained.util
 
-import nux.enchained.group.EnchainedItemGroup
-import nux.enchained.group.EnchainedToolsItemGroup
+import nux.enchained.item.group.EnchainedItemGroup
+import nux.enchained.item.group.EnchainedToolsItemGroup
 import nux.enchained.item.ArtifactItems
 import nux.enchained.item.BindingItems
 import nux.enchained.item.DevItems

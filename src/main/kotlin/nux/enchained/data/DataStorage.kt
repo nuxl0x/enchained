@@ -4,10 +4,11 @@ import net.minecraft.nbt.*
 import net.minecraft.server.world.ServerWorld
 import net.minecraft.world.PersistentState
 import nux.enchained.Enchained
+import nux.enchained.util.Binding
 
 class DataStorage : PersistentState() {
 
-    val storedData: MutableList<String> = ArrayList()
+    val storedData: MutableList<Binding> = ArrayList()
 
     // holds static functions
     companion object {
@@ -25,9 +26,9 @@ class DataStorage : PersistentState() {
             val data = DataStorage()
 
             if (nbt.contains("enchained_dat", NbtElement.LIST_TYPE.toInt())) {
-                val dataNbt: NbtList = nbt.getList("enchained_dat", NbtElement.STRING_TYPE.toInt())
+                val dataNbt: NbtList = nbt.getList("enchained_dat", NbtElement.COMPOUND_TYPE.toInt())
                 for (i in 0 until dataNbt.size) {
-                    data.storedData.add(dataNbt.getString(i))
+                    data.storedData.add(Binding.fromNbt(dataNbt.getCompound(i)))
                 }
             }
 
@@ -40,8 +41,8 @@ class DataStorage : PersistentState() {
     override fun writeNbt(nbt: NbtCompound): NbtCompound {
         val dataNbt = NbtList()
 
-        for (str: String in storedData) {
-            dataNbt.add(NbtString.of(str))
+        for (binding: Binding in storedData) {
+            dataNbt.add(binding.toNbt())
         }
         nbt.put("enchained_dat", dataNbt)
 
@@ -50,11 +51,11 @@ class DataStorage : PersistentState() {
 
     // functions to actually interact with data
     // do NOT directly interact with these
-    fun checkForEntry(query: String): Boolean {
+    fun checkForEntry(query: Binding): Boolean {
         return storedData.contains(query)
     }
 
-    fun createEntry(entryData: String) {
+    fun createEntry(entryData: Binding) {
 
             storedData.add(entryData)
             markDirty()
@@ -62,7 +63,7 @@ class DataStorage : PersistentState() {
 
     }
 
-    fun removeEntry(entryData: String) {
+    fun removeEntry(entryData: Binding) {
 
         if (storedData.contains(entryData)) {
             storedData.remove(entryData)
@@ -74,7 +75,7 @@ class DataStorage : PersistentState() {
 
     }
 
-    fun getEntries(): MutableList<String> {
+    fun getEntries(): MutableList<Binding> {
         return storedData
     }
 

@@ -2,25 +2,27 @@ package nux.enchained.data
 
 import net.minecraft.server.world.ServerWorld
 import nux.enchained.Enchained
+import nux.enchained.util.Binding
+import java.util.UUID
 
 class DataInterface(
     world: ServerWorld,
     dataType: String,
-    private val primaryUser: String,
-    private val secondaryUser: String
+    primaryUser: String,
+    primaryUuid: UUID,
+    secondaryUser: String,
+    secondaryUuid: UUID
 ) {
-    val dataEntry = "$dataType-$primaryUser:$secondaryUser"
-    val inverseDataEntry = "$dataType-$secondaryUser:$primaryUser"
+    val dataEntry = Binding(dataType, primaryUser, primaryUuid, secondaryUser, secondaryUuid)
+    val inverseDataEntry = Binding(dataType, secondaryUser, secondaryUuid, primaryUser, primaryUuid)
     val dataStorage = DataStorage.get(world)
 
     fun create(): Int {
         // Checks if both users are the same person.
-        /**
-        if (primaryUser == secondaryUser) {
-            Enchained.LOGGER.error("Entry '$dataEntry' cannot have matching fields.")
-            return 1
-        }
-        **/
+//        if (primaryUser == secondaryUser) {
+//            Enchained.LOGGER.error("Entry '$dataEntry' cannot have matching fields.")
+//            return 1
+//        }
 
         // Checks if this entry already exists within the database.
         if (dataStorage.checkForEntry(dataEntry)) {
@@ -47,8 +49,8 @@ class DataInterface(
         return returnValue
     }
 
-    fun getAll(): MutableList<String> {
-        val allData: MutableList<String> = dataStorage.getEntries()
+    fun getAll(): MutableList<Binding> {
+        val allData: MutableList<Binding> = dataStorage.getEntries()
         return allData
     }
 

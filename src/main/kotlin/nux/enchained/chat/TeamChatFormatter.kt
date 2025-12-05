@@ -23,11 +23,7 @@ object TeamChatFormatter {
 
             val teamColor = TextColor.fromRgb(teamColorInt)
 
-            val teamNameText = Text.literal(teamName).styled { it.withColor(teamColor) }
-
-            val teamPrefix = Text.literal("<")
-                .append(teamNameText)
-                .append("> ")
+            val teamPrefix = Text.literal("[$teamName] ").styled { it.withColor(teamColor) }
 
             val playerPrefix = Text.literal("<${sender.entityName}> ")
 

@@ -1,4 +1,4 @@
-package nux.enchained.group
+package nux.enchained.item.group
 
 import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup
 import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents
