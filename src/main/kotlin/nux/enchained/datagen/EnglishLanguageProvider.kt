@@ -93,7 +93,7 @@ class EnglishLanguageProvider(
         tBuilder.add("itemTooltip.enchained.primaryUser", "Bound to %s.")
         tBuilder.add("itemTooltip.enchained.secondaryUser", "Signed by %s.")
         tBuilder.add("itemTooltip.enchained.agreementPrimaryUser", "Proposed by %s.")
-        tBuilder.add("itemTooltip.agreementSecondaryUser", "Acknowledged by %s.")
+        tBuilder.add("itemTooltip.enchained.agreementSecondaryUser", "Acknowledged by %s.")
 
         // Messages
         tBuilder.add("message.enchained.binding.same_team", "You cannot sign this.")
